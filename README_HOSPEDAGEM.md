@@ -57,6 +57,38 @@ bibliotecas do `requirements.txt` do zero). Quando terminar, você recebe
 um link (algo como `https://SEU-APP.streamlit.app`) — esse é o endereço do
 seu dashboard, acessível de qualquer navegador.
 
+## Passo 3 (opcional): um segundo link seguro para compartilhar com amigos
+
+**Novidade (2026-08-30).** O link do Passo 2 mostra sua carteira REAL — não
+mande esse link pra ninguém. Se você quiser mostrar o app pra um amigo (ou
+qualquer outra pessoa) sem nenhum risco de expor seus dados, publique um
+SEGUNDO app, à parte, no "modo demonstração": ele mostra uma carteira
+inventada (tickers reais da B3, mas quantidades e valores fictícios) e
+nunca lê nem grava nada da sua carteira de verdade — nem o arquivo local,
+nem o Firestore. Mesmo que essa carteira de mentira seja "zerada" ou
+bagunçada por quem estiver mexendo, ela sempre volta igual da próxima vez
+que a página recarregar.
+
+1. Repita o Passo 2 (Create app / New app), com **exatamente o mesmo
+   repositório e branch** (`SEU-USUARIO/PortfolioApp`, `main`,
+   `app.py`) — isso cria um segundo app, com um link diferente do
+   primeiro.
+2. Em **"Advanced settings" → "Secrets"** deste segundo app, cole **só**
+   isto (nada de chave do Firebase nem e-mail aqui — de propósito, pra
+   esse link nunca ter acesso a nada real):
+   ```toml
+   [modo]
+   demo = true
+   ```
+3. Clique em **"Deploy"**.
+
+Pronto — esse segundo link (`https://SEU-APP-DEMO.streamlit.app`, um
+endereço diferente do primeiro) mostra sempre a mesma carteira fictícia,
+com um aviso "🎭 Modo demonstração" no topo da tela, e pode ser mandado
+pra qualquer pessoa sem risco nenhum. Se um dia quiser tirar esse link do
+ar, é só apagar esse segundo app em `share.streamlit.io -> Manage app ->
+Delete app` — o link principal (com seus dados reais) não é afetado.
+
 ## Coisas para saber
 
 - **O app "dorme" depois de 12h sem visitas.** Da próxima vez que alguém

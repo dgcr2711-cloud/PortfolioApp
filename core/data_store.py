@@ -115,6 +115,47 @@ def _ler_arquivo_local_bruto() -> dict[str, Any] | None:
         return None
 
 
+def _modo_demo_ativo() -> bool:
+    """
+    Este app está rodando como o link de DEMONSTRAÇÃO (2026-08-30) — um
+    segundo dashboard hospedado, publicado à parte, com uma carteira 100%
+    fictícia (ver data/dados_demo.json), pra você poder mandar o link pra
+    qualquer pessoa sem nenhum risco de expor sua carteira real. Ativado só
+    por uma flag no painel de Secrets DESSE segundo app: [modo] demo = true
+    (ver README_HOSPEDAGEM.md). Sem essa flag — no seu PC, e no dashboard
+    "de verdade" — o app funciona 100% normalmente com seus dados reais.
+    """
+    try:
+        import streamlit as st
+        return "modo" in st.secrets and bool(st.secrets["modo"].get("demo", False))
+    except Exception:
+        return False
+
+
+def esta_no_modo_demo() -> bool:
+    """
+    Versão "pública" de _modo_demo_ativo(), pra outros módulos (ex: app.py,
+    pra mostrar um aviso na tela) poderem perguntar isso sem chamar uma
+    função "privada" de outro arquivo.
+    """
+    return _modo_demo_ativo()
+
+
+def _carregar_dados_demo() -> dict[str, Any]:
+    """
+    Carrega a carteira fictícia usada só no link de demonstração (ver
+    _modo_demo_ativo). Sempre lê do zero o arquivo do repositório
+    (data/dados_demo.json — não é sensível, é inventado de propósito, com
+    tickers reais mas quantidades/preços fictícios), nunca o arquivo local
+    de dados de verdade nem o Firestore — é assim que se garante que esse
+    link nunca vaza nada da sua carteira real, mesmo que alguém explore o
+    app inteiro.
+    """
+    caminho = PASTA_DADOS / "dados_demo.json"
+    with open(caminho, "r", encoding="utf-8") as f:
+        return _mesclar_com_padrao(json.load(f))
+
+
 def carregar_dados() -> dict[str, Any]:
     """
     Carrega os dados — da nuvem (Firestore) se a sincronização estiver
@@ -141,7 +182,14 @@ def carregar_dados() -> dict[str, Any]:
     o arquivo local já tiver uma carteira de verdade, os dados locais são
     usados — e reenviados pra nuvem, corrigindo-a sozinha — em vez de
     apagar o que já existe aqui.
+
+    Modo demonstração (2026-08-30): se este for o link de demonstração (ver
+    _modo_demo_ativo), a carteira fictícia é devolvida direto — nem a
+    nuvem nem o arquivo local de dados de verdade chegam a ser tocados.
     """
+    if _modo_demo_ativo():
+        return _carregar_dados_demo()
+
     from core import cloud_sync  # import tardio: quem nunca configura a nuvem não precisa nem ter firebase_admin instalado
 
     PASTA_DADOS.mkdir(parents=True, exist_ok=True)
@@ -187,7 +235,16 @@ def salvar_dados(dados: dict[str, Any]) -> None:
     configurada — best-effort: uma falha ao enviar pra nuvem (sem internet,
     chave inválida) NUNCA impede nem desfaz a gravação local, que já
     aconteceu antes e é o que garante o app continuar funcionando offline.
+
+    Modo demonstração (2026-08-30): no link de demonstração (ver
+    _modo_demo_ativo), esta função não faz NADA — nem grava local nem
+    manda pra nuvem. É de propósito: alguém explorando o app de demonstração
+    (ex: clicando em "Atualizar Dados" ou lançando uma compra de teste) não
+    pode alterar nada de verdade nem persistir nada, nem ali nem na sua
+    conta real. A carteira fictícia volta sempre igual no próximo carregamento.
     """
+    if _modo_demo_ativo():
+        return
     _salvar_localmente(dados)
 
     from core import cloud_sync  # import tardio: mesmo motivo de carregar_dados()

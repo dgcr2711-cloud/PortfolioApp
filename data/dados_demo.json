@@ -1,0 +1,50 @@
+{
+  "compras": [
+    {"id": "demo-1", "tipo": "compra", "ticker": "PETR4", "data": "2023-03-15", "qtd": 200, "preco": 28.5, "taxas": 12.0},
+    {"id": "demo-2", "tipo": "compra", "ticker": "VALE3", "data": "2023-05-10", "qtd": 100, "preco": 68.0, "taxas": 8.0},
+    {"id": "demo-3", "tipo": "compra", "ticker": "ITUB4", "data": "2023-07-22", "qtd": 300, "preco": 25.0, "taxas": 15.0},
+    {"id": "demo-4", "tipo": "compra", "ticker": "ITUB4", "data": "2024-01-15", "qtd": 100, "preco": 27.5, "taxas": 6.0},
+    {"id": "demo-5", "tipo": "compra", "ticker": "WEGE3", "data": "2023-09-05", "qtd": 150, "preco": 38.0, "taxas": 10.0},
+    {"id": "demo-6", "tipo": "compra", "ticker": "BBAS3", "data": "2024-02-20", "qtd": 200, "preco": 52.0, "taxas": 14.0},
+    {"id": "demo-7", "tipo": "compra", "ticker": "MGLU3", "data": "2023-11-10", "qtd": 500, "preco": 3.2, "taxas": 5.0},
+    {"id": "demo-8", "tipo": "venda", "ticker": "MGLU3", "data": "2024-06-01", "qtd": 200, "preco": 4.1, "taxas": 3.0}
+  ],
+  "cotacoes": {},
+  "proventos": [
+    {"data": "2023-08-15", "ticker": "PETR4", "tipo": "Dividendo", "valor": 180.0},
+    {"data": "2023-12-20", "ticker": "ITUB4", "tipo": "JCP", "valor": 95.5},
+    {"data": "2024-03-10", "ticker": "WEGE3", "tipo": "Dividendo", "valor": 42.0},
+    {"data": "2024-05-15", "ticker": "BBAS3", "tipo": "JCP", "valor": 60.0}
+  ],
+  "historico": [
+    {"data": "2024-01-31", "totalInvestido": 28390.0, "totalAtual": 29500.0, "ibov": null},
+    {"data": "2024-02-29", "totalInvestido": 38390.0, "totalAtual": 40100.0, "ibov": null},
+    {"data": "2024-03-31", "totalInvestido": 38390.0, "totalAtual": 41200.0, "ibov": null},
+    {"data": "2024-04-30", "totalInvestido": 38390.0, "totalAtual": 39800.0, "ibov": null},
+    {"data": "2024-05-31", "totalInvestido": 38390.0, "totalAtual": 42500.0, "ibov": null},
+    {"data": "2024-06-30", "totalInvestido": 37000.0, "totalAtual": 43900.0, "ibov": null}
+  ],
+  "alertas": {"PETR4": 25.0, "VALE3": 60.0},
+  "setores": {
+    "PETR4": "Petróleo e Gás",
+    "VALE3": "Mineração e Siderurgia",
+    "ITUB4": "Bancos",
+    "WEGE3": "Bens de Capital",
+    "BBAS3": "Bancos",
+    "MGLU3": "Varejo"
+  },
+  "precosTeto": {
+    "PETR4": {"precoTeto": 32.0, "precoTetoComMargem": 28.8, "atualizadoEm": "2024-01-01"},
+    "ITUB4": {"precoTeto": 30.0, "precoTetoComMargem": 27.0, "atualizadoEm": "2024-01-01"}
+  },
+  "watchlist": ["BBSE3", "TAEE11"],
+  "eventos": [],
+  "fundamentos": {},
+  "teses": {},
+  "piotroski": {},
+  "altman": {},
+  "taxaLivreRiscoAnualPct": 10.0,
+  "metasAlocacao": {},
+  "alertasEnviados": {},
+  "exportadoEm": null
+}

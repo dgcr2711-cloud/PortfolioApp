@@ -24,7 +24,7 @@ from __future__ import annotations
 import streamlit as st
 
 from core import cloud_sync
-from core.data_store import carregar_dados, salvar_dados
+from core.data_store import carregar_dados, esta_no_modo_demo, salvar_dados
 from ui import (
     carteira,
     compras,
@@ -67,6 +67,13 @@ def salvar_estado(novos_dados: dict) -> None:
 
 
 dados = st.session_state["dados"]
+
+# Aviso do link de demonstração (2026-08-30) — ver
+# core/data_store.py::_modo_demo_ativo(). Fica bem visível, logo no topo,
+# pra quem receber esse link (ex: um amigo) nunca confundir a carteira
+# fictícia mostrada aqui com dados reais de alguém.
+if esta_no_modo_demo():
+    st.info("🎭 **Modo demonstração** — esta é uma carteira fictícia, só para mostrar como o app funciona. Nenhum dado real.")
 
 ABAS = [
     "🏠 Visão Geral",

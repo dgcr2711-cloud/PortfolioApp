@@ -19,10 +19,39 @@ Rode com `pytest -v` (ver instruções em tests/test_calculations.py).
 from __future__ import annotations
 
 import json
+import sys
 import tempfile
 from pathlib import Path
 
 from core import cloud_sync, data_store
+
+
+class _FalsoModuloStreamlit:
+    """Dublê mínimo do módulo `streamlit`, só com o atributo `secrets` (um
+    dict) — usado pra testar o modo demonstração (ver _modo_demo_ativo) sem
+    precisar instalar o streamlit de verdade nem rodar dentro de um app."""
+
+    def __init__(self, secrets: dict):
+        self.secrets = secrets
+
+
+def _com_streamlit_falso(secrets: dict | None, testar):
+    """Insere um módulo `streamlit` falso em sys.modules (ou garante que
+    não exista nenhum, se secrets=None) durante a chamada de `testar`, e
+    sempre restaura o estado original — mesmo se `testar` lançar."""
+    tinha_streamlit = "streamlit" in sys.modules
+    streamlit_original = sys.modules.get("streamlit")
+    if secrets is None:
+        sys.modules.pop("streamlit", None)
+    else:
+        sys.modules["streamlit"] = _FalsoModuloStreamlit(secrets)
+    try:
+        testar()
+    finally:
+        if tinha_streamlit:
+            sys.modules["streamlit"] = streamlit_original
+        else:
+            sys.modules.pop("streamlit", None)
 
 
 class NuvemFalsa:
@@ -288,6 +317,74 @@ def test_nuvem_com_carteira_real_tem_prioridade_mesmo_com_local_tambem_real():
 
         assert dados["compras"] == dados_nuvem_reais["compras"]
         assert nuvem.chamadas_salvar == 0  # não precisou "consertar" nada
+
+    _com_ambiente_isolado(testar)
+
+
+# --- Modo demonstração (2026-08-30) -------------------------------------
+# Um segundo link hospedado, com uma carteira fictícia (data/dados_demo.json),
+# seguro pra mandar pra qualquer pessoa — ver _modo_demo_ativo() e
+# _carregar_dados_demo() em core/data_store.py.
+
+_CARTEIRA_DEMO_FALSA = {
+    "compras": [{"id": "demo-1", "tipo": "compra", "ticker": "PETR4", "data": "2023-01-01", "qtd": 10, "preco": 20.0, "taxas": 0.0}],
+    "historico": [{"data": "2023-01-31", "totalInvestido": 200.0, "totalAtual": 210.0, "ibov": None}],
+}
+
+
+def _escrever_carteira_demo_falsa():
+    data_store.PASTA_DADOS.mkdir(parents=True, exist_ok=True)
+    with open(data_store.PASTA_DADOS / "dados_demo.json", "w", encoding="utf-8") as f:
+        json.dump(_CARTEIRA_DEMO_FALSA, f)
+
+
+def test_modo_demo_ativo_devolve_a_carteira_ficticia_sem_tocar_nuvem_nem_local():
+    def testar(nuvem):
+        _escrever_carteira_demo_falsa()
+
+        def rodar():
+            dados = data_store.carregar_dados()
+            assert dados["compras"] == _CARTEIRA_DEMO_FALSA["compras"]
+            assert nuvem.chamadas_carregar == 0  # nunca chegou a olhar a nuvem de verdade
+            assert not data_store.ARQUIVO_DADOS.exists()  # nem tocou no arquivo local de dados de verdade
+
+        _com_streamlit_falso({"modo": {"demo": True}}, rodar)
+
+    # nuvem.dados tem uma carteira REAL — se o modo demo vazasse pra nuvem
+    # de verdade por engano, este teste pegaria (usaria os dados da nuvem
+    # em vez dos fictícios).
+    _com_ambiente_isolado(testar, dados_iniciais_na_nuvem={**data_store.estrutura_padrao(), "compras": [{"ticker": "REAL3"}]})
+
+
+def test_modo_demo_ativo_ignora_salvar_dados_completamente():
+    def testar(nuvem):
+        _escrever_carteira_demo_falsa()
+
+        def rodar():
+            data_store.salvar_dados({**data_store.estrutura_padrao(), "compras": [{"ticker": "MUDEI3"}]})
+            assert nuvem.chamadas_salvar == 0
+            assert not data_store.ARQUIVO_DADOS.exists()
+
+            # e o próximo carregamento continua devolvendo a carteira fictícia original, intacta
+            dados = data_store.carregar_dados()
+            assert dados["compras"] == _CARTEIRA_DEMO_FALSA["compras"]
+
+        _com_streamlit_falso({"modo": {"demo": True}}, rodar)
+
+    _com_ambiente_isolado(testar, dados_iniciais_na_nuvem=None)
+
+
+def test_sem_flag_de_modo_demo_usa_o_comportamento_normal():
+    """Secrets configurados, mas sem a chave 'modo' -> não é o link de
+    demonstração, comportamento de sempre (nuvem/local reais)."""
+    def testar(nuvem):
+        nuvem.dados = {**data_store.estrutura_padrao(), "compras": [{"ticker": "REAL3"}]}
+
+        def rodar():
+            dados = data_store.carregar_dados()
+            assert dados["compras"] == [{"ticker": "REAL3"}]
+
+        _com_streamlit_falso({"outra_coisa": {}}, rodar)
 
     _com_ambiente_isolado(testar)
 
