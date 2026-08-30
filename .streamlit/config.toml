@@ -1,0 +1,17 @@
+# Tema escuro do app, mesma paleta do dashboard original (Tailwind
+# "gray-900/gray-800" de fundo, destaque "emerald-500"). Mudar as cores do
+# app inteiro é só editar os valores aqui — não precisa mexer no código.
+[theme]
+base = "dark"
+primaryColor = "#10b981"
+backgroundColor = "#111827"
+secondaryBackgroundColor = "#1f2937"
+textColor = "#e5e7eb"
+font = "sans serif"
+
+[server]
+headless = false
+# Faz o app recarregar sozinho o código Python assim que um arquivo .py é
+# alterado (por exemplo, quando eu envio uma correção) — sem isso, o
+# Streamlit só mostra um avisinho perguntando se você quer atualizar.
+runOnSave = true

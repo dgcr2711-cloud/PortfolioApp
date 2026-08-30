@@ -1,0 +1,4 @@
+# Dependências só para RODAR OS TESTES automatizados (tests/) — não é
+# preciso instalar isto para simplesmente usar o app no dia a dia.
+# Instale com: pip install -r requirements-dev.txt
+pytest>=8.0

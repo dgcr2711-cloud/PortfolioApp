@@ -1,0 +1,7 @@
+# Dependência extra, só necessária se você configurar a sincronização com
+# o app do celular (ver README_MOBILE.md). Sem isso instalado, o app do PC
+# funciona 100% normalmente — a sincronização é simplesmente ignorada.
+#
+# Instale com: pip install -r requirements-mobile.txt
+
+firebase-admin>=6.5

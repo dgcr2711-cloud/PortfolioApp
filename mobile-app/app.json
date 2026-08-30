@@ -1,0 +1,15 @@
+{
+  "expo": {
+    "name": "Meu Portfólio B3",
+    "slug": "meu-portfolio-b3-mobile",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "backgroundColor": "#111827",
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {},
+    "web": {}
+  }
+}

@@ -1,0 +1,30 @@
+# Segredos — nunca devem entrar em nenhum repositório ou backup compartilhado.
+# A chave do Firebase já não fica mais nesta pasta (ver core/config.py::PASTA_SEGREDOS
+# e core/cloud_sync.py), mas esta regra fica como segunda camada de proteção,
+# caso uma cópia antiga apareça aqui de novo.
+firebase-service-account.json
+*.pem
+*.key
+.streamlit/secrets.toml
+
+# Dados pessoais da carteira — não fazem sentido num repositório de código.
+data/portfolio_data.json
+data/backups/
+
+# Notas de corretagem (PDFs com CPF, número de conta na corretora e valores
+# reais de transações) — documentos pessoais, nunca devem ir para o GitHub,
+# nem em repositório privado. Adicionado em 2026-08-30 depois de notar que
+# esses arquivos tinham entrado no commit inicial do projeto.
+Notas de Corretagem/
+*.pdf
+
+# Ambientes e dependências instaladas (recriáveis a partir de requirements.txt/package.json)
+venv/
+.venv/
+__pycache__/
+*.pyc
+mobile-app/node_modules/
+mobile-app/.expo/
+
+# Logs e arquivos temporários
+*.log
