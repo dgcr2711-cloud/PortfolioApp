@@ -85,6 +85,36 @@ def _mesclar_com_padrao(dados: dict[str, Any]) -> dict[str, Any]:
     return base
 
 
+def _sem_dados_de_verdade(dados: dict[str, Any]) -> bool:
+    """
+    "Vazia" nesse sentido bem específico: nunca teve nenhuma compra/venda
+    registrada nem nenhum ponto de histórico de patrimônio — ou seja,
+    ninguém nunca usou essa carteira de verdade (é exatamente o que
+    estrutura_padrao() começa sendo). Usado só dentro de carregar_dados(),
+    pra decidir se um documento "vazio" vindo da nuvem pode ou não
+    substituir dados reais que já existem no arquivo local — nunca pra
+    decidir o que mostrar na tela nem qualquer outra coisa.
+    """
+    return not dados.get("compras") and not dados.get("historico")
+
+
+def _ler_arquivo_local_bruto() -> dict[str, Any] | None:
+    """
+    Lê o arquivo local de dados sem nunca lançar exceção — usado só
+    internamente por carregar_dados(), pra comparar com o que veio da
+    nuvem (ver _sem_dados_de_verdade). None se o arquivo não existir ou
+    estiver corrompido/ilegível (esse caso é tratado normalmente mais
+    abaixo, no restante de carregar_dados()).
+    """
+    if not ARQUIVO_DADOS.exists():
+        return None
+    try:
+        with open(ARQUIVO_DADOS, "r", encoding="utf-8") as f:
+            return _mesclar_com_padrao(json.load(f))
+    except (json.JSONDecodeError, OSError):
+        return None
+
+
 def carregar_dados() -> dict[str, Any]:
     """
     Carrega os dados — da nuvem (Firestore) se a sincronização estiver
@@ -99,6 +129,18 @@ def carregar_dados() -> dict[str, Any]:
     vez que os dados vêm da nuvem, uma cópia é salva localmente também (ver
     abaixo) — o app continua 100% utilizável offline, com os dados da
     última vez em que a nuvem foi alcançada.
+
+    Proteção contra nuvem "vazia" (2026-08-30): um dashboard hospedado
+    (Streamlit Cloud) roda sempre num computador novo, sem o arquivo local
+    de sempre — se ele for o primeiro a rodar depois que a sincronização
+    foi configurada, antes deste computador ter enviado a carteira real
+    pra nuvem uma vez sequer, a nuvem responde com um documento "vazio".
+    Sem este cuidado, isso apagaria a carteira real que já existe aqui
+    (o arquivo local) na próxima vez que você abrisse o app no PC. Por
+    isso, se a nuvem vier vazia (sem nenhuma compra/venda nem histórico) e
+    o arquivo local já tiver uma carteira de verdade, os dados locais são
+    usados — e reenviados pra nuvem, corrigindo-a sozinha — em vez de
+    apagar o que já existe aqui.
     """
     from core import cloud_sync  # import tardio: quem nunca configura a nuvem não precisa nem ter firebase_admin instalado
 
@@ -106,9 +148,20 @@ def carregar_dados() -> dict[str, Any]:
 
     dados_da_nuvem = cloud_sync.carregar_dados_completos_da_nuvem()
     if dados_da_nuvem is not None:
-        dados = _mesclar_com_padrao(dados_da_nuvem)
-        _salvar_localmente(dados)  # mantém uma cópia local fresca como cache/backup offline
-        return dados
+        dados_da_nuvem = _mesclar_com_padrao(dados_da_nuvem)
+        dados_locais = _ler_arquivo_local_bruto()
+        nuvem_vazia_mas_local_tem_dados_reais = (
+            _sem_dados_de_verdade(dados_da_nuvem)
+            and dados_locais is not None
+            and not _sem_dados_de_verdade(dados_locais)
+        )
+        if nuvem_vazia_mas_local_tem_dados_reais:
+            # Não sobrescreve o arquivo local (ele já é o correto) — só
+            # corrige a nuvem, que é quem está desatualizada aqui.
+            cloud_sync.salvar_dados_completos_na_nuvem(dados_locais)
+            return dados_locais
+        _salvar_localmente(dados_da_nuvem)  # mantém uma cópia local fresca como cache/backup offline
+        return dados_da_nuvem
 
     if not ARQUIVO_DADOS.exists():
         dados = estrutura_padrao()

@@ -216,6 +216,82 @@ def test_primeira_vez_com_nuvem_configurada_mas_documento_ainda_nao_existe():
     _com_ambiente_isolado(testar, dados_iniciais_na_nuvem=None)
 
 
+# --- Proteção contra nuvem "vazia" apagando dados reais (2026-08-30) ---
+# (ver docstring de data_store.carregar_dados() e _sem_dados_de_verdade())
+
+def test_nuvem_vazia_mas_arquivo_local_tem_carteira_real_usa_o_local_e_conserta_a_nuvem():
+    def testar(nuvem):
+        # Arquivo local já tem uma carteira DE VERDADE (compra registrada).
+        data_store.PASTA_DADOS.mkdir(parents=True, exist_ok=True)
+        dados_locais_reais = data_store.estrutura_padrao()
+        dados_locais_reais["compras"] = [{"ticker": "AXIA3", "tipo": "compra", "quantidade": 100, "preco": 10.0}]
+        with open(data_store.ARQUIVO_DADOS, "w", encoding="utf-8") as f:
+            json.dump(dados_locais_reais, f)
+
+        # ...mas a nuvem responde com um documento vazio (ex: um dashboard
+        # hospedado que rodou antes de qualquer sincronização real).
+        nuvem.dados = data_store.estrutura_padrao()
+
+        dados = data_store.carregar_dados()
+
+        assert dados["compras"] == dados_locais_reais["compras"]  # usou o local, não a nuvem vazia
+        assert nuvem.dados["compras"] == dados_locais_reais["compras"]  # e corrigiu a nuvem sozinho
+        assert nuvem.chamadas_salvar == 1
+
+    _com_ambiente_isolado(testar)
+
+
+def test_nuvem_vazia_e_local_tambem_vazio_usa_a_nuvem_normalmente_sem_reenviar():
+    def testar(nuvem):
+        data_store.PASTA_DADOS.mkdir(parents=True, exist_ok=True)
+        with open(data_store.ARQUIVO_DADOS, "w", encoding="utf-8") as f:
+            json.dump(data_store.estrutura_padrao(), f)  # local também vazio
+
+        nuvem.dados = data_store.estrutura_padrao()
+
+        dados = data_store.carregar_dados()
+
+        assert dados["compras"] == []
+        assert nuvem.chamadas_salvar == 0  # nada de real pra proteger, comportamento normal
+
+    _com_ambiente_isolado(testar)
+
+
+def test_nuvem_vazia_sem_nenhum_arquivo_local_ainda_usa_a_nuvem_normalmente():
+    def testar(nuvem):
+        # Sem arquivo local nenhum (ex: primeira vez do dashboard hospedado).
+        nuvem.dados = data_store.estrutura_padrao()
+
+        dados = data_store.carregar_dados()
+
+        assert dados["compras"] == []
+        assert nuvem.chamadas_salvar == 0  # não há dado local real pra proteger
+
+    _com_ambiente_isolado(testar)
+
+
+def test_nuvem_com_carteira_real_tem_prioridade_mesmo_com_local_tambem_real():
+    """A nuvem só perde a prioridade quando está genuinamente vazia — com
+    dados de verdade dos dois lados, ela continua ganhando (é a mais nova)."""
+    def testar(nuvem):
+        data_store.PASTA_DADOS.mkdir(parents=True, exist_ok=True)
+        dados_locais = data_store.estrutura_padrao()
+        dados_locais["compras"] = [{"ticker": "LOCAL3", "tipo": "compra", "quantidade": 1, "preco": 1.0}]
+        with open(data_store.ARQUIVO_DADOS, "w", encoding="utf-8") as f:
+            json.dump(dados_locais, f)
+
+        dados_nuvem_reais = data_store.estrutura_padrao()
+        dados_nuvem_reais["compras"] = [{"ticker": "NUVEM3", "tipo": "compra", "quantidade": 2, "preco": 2.0}]
+        nuvem.dados = dados_nuvem_reais
+
+        dados = data_store.carregar_dados()
+
+        assert dados["compras"] == dados_nuvem_reais["compras"]
+        assert nuvem.chamadas_salvar == 0  # não precisou "consertar" nada
+
+    _com_ambiente_isolado(testar)
+
+
 # --- Comportamento local original (atomicidade / backup) --------------
 
 def test_gravacao_atomica_nao_deixa_arquivo_temporario_para_tras():
