@@ -69,10 +69,13 @@ nem o Firestore. Mesmo que essa carteira de mentira seja "zerada" ou
 bagunçada por quem estiver mexendo, ela sempre volta igual da próxima vez
 que a página recarregar.
 
-1. Repita o Passo 2 (Create app / New app), com **exatamente o mesmo
-   repositório e branch** (`SEU-USUARIO/PortfolioApp`, `main`,
-   `app.py`) — isso cria um segundo app, com um link diferente do
-   primeiro.
+1. Repita o Passo 2 (Create app / New app), com **o mesmo repositório e
+   branch** (`SEU-USUARIO/PortfolioApp`, `main`) — mas desta vez, em
+   **"Main file path"**, coloque **`app_demo.py`** (não `app.py`). O
+   Streamlit Cloud não deixa criar um segundo app com o mesmo arquivo
+   principal do primeiro, mesmo com Secrets diferentes — `app_demo.py` é
+   só uma "porta de entrada" separada que roda exatamente o mesmo app.py
+   por trás (ver o próprio arquivo pra entender).
 2. Em **"Advanced settings" → "Secrets"** deste segundo app, cole **só**
    isto (nada de chave do Firebase nem e-mail aqui — de propósito, pra
    esse link nunca ter acesso a nada real):
