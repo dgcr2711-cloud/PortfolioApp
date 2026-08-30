@@ -4,3 +4,10 @@ pandas>=2.0
 plotly>=5.20
 pdfplumber>=0.11
 openpyxl>=3.1
+# firebase-admin precisa estar aqui (e não só em requirements-mobile.txt)
+# porque o Streamlit Community Cloud só instala o que está neste arquivo
+# principal — ele não roda o "Iniciar App.bat" nem sabe instalar
+# bibliotecas condicionalmente. Adicionado em 2026-08-30 depois que o
+# dashboard hospedado quebrou com "ModuleNotFoundError: No module named
+# 'firebase_admin'" ao tentar sincronizar com o Firestore.
+firebase-admin>=6.5

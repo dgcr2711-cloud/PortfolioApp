@@ -21,10 +21,16 @@ ignorada, e o app continua funcionando 100% normalmente sem o celular —
 ninguém é obrigado a configurar isso.
 
 IMPORTANTE: o pacote `firebase-admin` só é importado aqui dentro, na hora
-em que a chave existir e a sincronização for de fato tentada — assim,
-quem não configurar o app do celular não precisa nem instalar essa
-biblioteca (ela NÃO está no requirements.txt principal, só em
-requirements-mobile.txt).
+em que a chave existir e a sincronização for de fato tentada — assim, no
+seu PC, quem não configurar o app do celular nem percebe essa biblioteca
+(o app funciona normalmente sem ela).
+
+Nota (2026-08-30): `firebase-admin` PASSOU a estar também no
+requirements.txt principal (além de requirements-mobile.txt), porque o
+dashboard hospedado no Streamlit Community Cloud usa exatamente este
+arquivo para sincronizar com o Firestore — sem ela lá, o app hospedado
+quebra com "ModuleNotFoundError". No seu PC isso só significa uma
+biblioteca a mais instalada; nada muda no comportamento.
 """
 
 from __future__ import annotations

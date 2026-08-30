@@ -3,5 +3,10 @@
 # funciona 100% normalmente — a sincronização é simplesmente ignorada.
 #
 # Instale com: pip install -r requirements-mobile.txt
+#
+# Nota (2026-08-30): desde que o dashboard passou a ser hospedado no
+# Streamlit Community Cloud, o firebase-admin também foi adicionado ao
+# requirements.txt principal (obrigatório lá). Este arquivo continua
+# existindo só como referência/instalação manual isolada, se precisar.
 
 firebase-admin>=6.5
