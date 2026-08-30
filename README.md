@@ -170,6 +170,13 @@ do seu alvo e cair de novo depois, um novo e-mail é enviado nessa próxima
 queda (não fica repetindo o mesmo e-mail a cada "Atualizar Dados" enquanto
 o preço não se mexe).
 
+### 8. (Opcional) Hospedar o dashboard na nuvem, acessível de qualquer lugar
+
+**Novidade (2026-08-30).** Além de rodar no seu PC, o dashboard pode ficar
+hospedado de graça no Streamlit Community Cloud, com um link acessível de
+qualquer navegador (celular incluso), sem precisar do seu PC ligado. Veja
+o passo a passo completo em `README_HOSPEDAGEM.md`.
+
 ## Estrutura do projeto
 
 ```
@@ -179,7 +186,8 @@ PortfolioApp/
 ├── .streamlit/config.toml # tema escuro do app
 ├── core/                  # regras de negócio (sem depender do Streamlit)
 │   ├── config.py          # constantes (margem de segurança, limite de IR etc.)
-│   ├── data_store.py      # carregar/salvar/exportar/importar o JSON de dados
+│   ├── data_store.py      # carregar/salvar/exportar/importar os dados (local + Firestore)
+│   ├── cloud_sync.py      # sincronização com o Firestore (celular + dashboard hospedado)
 │   ├── calculations.py    # preço médio, preço teto, IR, TWR, FCD...
 │   ├── market_data.py     # busca de cotações via yfinance (com cache)
 │   ├── notificacoes_email.py  # e-mail de alerta de preço-alvo (opcional)
@@ -190,6 +198,7 @@ PortfolioApp/
 │   ├── ativos.py          # monta a lista combinada de posições + alvo
 │   ├── acoes_comuns.py    # atualização de cotações (botão "Atualizar Dados")
 │   └── styles.py          # CSS dos cards/badges
+├── gerar_secrets_streamlit.py  # gera o texto de Secrets para hospedar no Streamlit Cloud (ver README_HOSPEDAGEM.md)
 └── data/
     └── portfolio_data.json  # seus dados (criado automaticamente)
 ```

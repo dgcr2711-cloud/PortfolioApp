@@ -113,22 +113,59 @@ def sincronizacao_configurada() -> bool:
     return CAMINHO_CHAVE_FIREBASE.exists() or _CAMINHO_CHAVE_FIREBASE_ANTIGO.exists()
 
 
+def _obter_credenciais_dict_do_streamlit() -> dict[str, Any] | None:
+    """
+    Fallback usado quando este código roda HOSPEDADO no Streamlit Community
+    Cloud (2026-08-30) — lá não existe a pasta pessoal do seu PC
+    (~/.portfolio_b3_secrets), então a chave do Firebase é colada no painel
+    "Secrets" do próprio app, no site do Streamlit Cloud (nunca no código,
+    nunca no GitHub), sob a chave [firebase_service_account]. Ver
+    README_HOSPEDAGEM.md para o passo a passo de como colar isso lá.
+
+    Retorna None sem erro nenhum em qualquer um destes casos: rodando no
+    PC (a chave já vem do arquivo, ver _garantir_firebase_inicializado),
+    rodando fora de um app Streamlit de verdade (ex: um script de segundo
+    plano no GitHub Actions), ou streamlit nem estando instalado.
+    """
+    try:
+        import streamlit as st
+
+        if "firebase_service_account" in st.secrets:
+            return dict(st.secrets["firebase_service_account"])
+    except Exception:
+        pass
+    return None
+
+
 def _garantir_firebase_inicializado() -> bool:
-    """Inicializa a conexão com o Firebase uma única vez por execução do app. Retorna False se não há chave configurada."""
+    """
+    Inicializa a conexão com o Firebase uma única vez por execução do app.
+    Tenta, nesta ordem: (1) a chave em arquivo local (uso normal no seu
+    PC), (2) os "Secrets" do Streamlit Cloud (uso hospedado, 2026-08-30 —
+    ver _obter_credenciais_dict_do_streamlit). Retorna False se nenhuma das
+    duas estiver disponível.
+    """
     global _app_inicializado
-    if not sincronizacao_configurada():
-        return False
     if _app_inicializado:
         return True
+
+    if sincronizacao_configurada():
+        # Depois de sincronizacao_configurada() já ter tentado migrar, usa
+        # a chave nova se ela existir; se a migração falhou por algum
+        # motivo, cai para o local antigo em vez de travar a sincronização.
+        caminho_chave = CAMINHO_CHAVE_FIREBASE if CAMINHO_CHAVE_FIREBASE.exists() else _CAMINHO_CHAVE_FIREBASE_ANTIGO
+        origem_credenciais: str | dict[str, Any] = str(caminho_chave)
+    else:
+        credenciais_do_streamlit = _obter_credenciais_dict_do_streamlit()
+        if credenciais_do_streamlit is None:
+            return False
+        origem_credenciais = credenciais_do_streamlit
+
     import firebase_admin
     from firebase_admin import credentials
 
-    # Depois de sincronizacao_configurada() já ter tentado migrar, usa a
-    # chave nova se ela existir; se a migração falhou por algum motivo,
-    # cai para o local antigo em vez de travar a sincronização.
-    caminho_chave = CAMINHO_CHAVE_FIREBASE if CAMINHO_CHAVE_FIREBASE.exists() else _CAMINHO_CHAVE_FIREBASE_ANTIGO
     if not firebase_admin._apps:
-        cred = credentials.Certificate(str(caminho_chave))
+        cred = credentials.Certificate(origem_credenciais)
         firebase_admin.initialize_app(cred)
     _app_inicializado = True
     return True

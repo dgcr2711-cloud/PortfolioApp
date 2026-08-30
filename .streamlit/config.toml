@@ -10,7 +10,15 @@ textColor = "#e5e7eb"
 font = "sans serif"
 
 [server]
-headless = false
+# headless=true evita que o Streamlit fique esperando uma resposta de
+# teclado ("Welcome to Streamlit... enter your email") na primeira vez que
+# roda — no seu PC isso nunca trava porque tem alguém ali pra digitar
+# Enter, mas hospedado no Streamlit Community Cloud (2026-08-30) não tem
+# ninguém digitando nada, e o app trava esperando pra sempre, nunca chega
+# a abrir. No seu PC, o único efeito é o navegador não abrir mais sozinho
+# — o "Iniciar App.bat" continua mostrando o endereço (http://localhost:8501)
+# pra você colar no navegador, como o README.md já explica.
+headless = true
 # Faz o app recarregar sozinho o código Python assim que um arquivo .py é
 # alterado (por exemplo, quando eu envio uma correção) — sem isso, o
 # Streamlit só mostra um avisinho perguntando se você quer atualizar.

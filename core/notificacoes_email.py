@@ -46,11 +46,27 @@ _PORTA_SMTP_PADRAO = 465
 
 
 def notificacoes_configuradas() -> bool:
-    """Existe um `email_alertas.json` válido? Se não, todo o resto vira no-op."""
+    """Existe uma configuração de e-mail válida (arquivo local ou Secrets do Streamlit)? Se não, todo o resto vira no-op."""
     return _carregar_config() is not None
 
 
+def _config_tem_campos_obrigatorios(config: dict[str, Any]) -> bool:
+    return bool(config.get("remetente") and config.get("senha_app") and config.get("destinatario"))
+
+
 def _carregar_config() -> dict[str, Any] | None:
+    """
+    Carrega a configuração de e-mail — do arquivo local (uso normal no seu
+    PC) se existir e for válido, senão dos "Secrets" do Streamlit Cloud
+    (uso hospedado, 2026-08-30 — ver _carregar_config_do_streamlit).
+    """
+    config = _carregar_config_do_arquivo()
+    if config is not None:
+        return config
+    return _carregar_config_do_streamlit()
+
+
+def _carregar_config_do_arquivo() -> dict[str, Any] | None:
     if not CAMINHO_CONFIG_EMAIL.exists():
         return None
     try:
@@ -58,9 +74,36 @@ def _carregar_config() -> dict[str, Any] | None:
             config = json.load(f)
     except (OSError, json.JSONDecodeError):
         return None
-    if not config.get("remetente") or not config.get("senha_app") or not config.get("destinatario"):
+    if not _config_tem_campos_obrigatorios(config):
         return None
     return config
+
+
+def _carregar_config_do_streamlit() -> dict[str, Any] | None:
+    """
+    Fallback usado quando este código roda HOSPEDADO no Streamlit Community
+    Cloud (2026-08-30) — lá não existe a pasta pessoal do seu PC
+    (~/.portfolio_b3_secrets), então a configuração de e-mail é colada no
+    painel "Secrets" do próprio app, no site do Streamlit Cloud (nunca no
+    código, nunca no GitHub), sob a chave [email_alertas]. Ver
+    README_HOSPEDAGEM.md para o passo a passo de como colar isso lá.
+
+    Retorna None sem erro nenhum em qualquer um destes casos: rodando no
+    PC (a configuração já veio do arquivo, acima), rodando fora de um app
+    Streamlit de verdade (ex: um script de segundo plano no GitHub
+    Actions), streamlit nem estando instalado, ou a chave não estar
+    configurada/completa nos Secrets.
+    """
+    try:
+        import streamlit as st
+
+        if "email_alertas" in st.secrets:
+            config = dict(st.secrets["email_alertas"])
+            if _config_tem_campos_obrigatorios(config):
+                return config
+    except Exception:
+        pass
+    return None
 
 
 def enviar_email(destinatario: str, remetente: str, senha_app: str, assunto: str, corpo: str,

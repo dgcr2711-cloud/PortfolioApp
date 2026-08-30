@@ -16,6 +16,7 @@ Rode com `pytest -v` (ver instruções em tests/test_calculations.py).
 from __future__ import annotations
 
 import json
+import sys
 import tempfile
 from pathlib import Path
 
@@ -53,6 +54,39 @@ def _com_config_email(conteudo: dict | None, testar):
 
 
 _CONFIG_VALIDA = {"remetente": "voce@gmail.com", "senha_app": "abcd efgh ijkl mnop", "destinatario": "voce@gmail.com"}
+
+
+class _FalsoModuloStreamlit:
+    """Dublê mínimo do módulo `streamlit`, só com o atributo `secrets` (um
+    dict) — usado pra testar o fallback dos Secrets do Streamlit Cloud
+    (2026-08-30) sem precisar instalar o streamlit de verdade."""
+
+    def __init__(self, secrets: dict):
+        self.secrets = secrets
+
+
+def _com_streamlit_falso(secrets: dict | None, testar):
+    """Insere um módulo `streamlit` falso em sys.modules (ou garante que
+    não exista nenhum, se secrets=None) durante a chamada de `testar`, e
+    sempre restaura o estado original — mesmo se `testar` lançar."""
+    tinha_streamlit = "streamlit" in sys.modules
+    streamlit_original = sys.modules.get("streamlit")
+    if secrets is None:
+        sys.modules.pop("streamlit", None)
+    else:
+        sys.modules["streamlit"] = _FalsoModuloStreamlit(secrets)
+    try:
+        testar()
+    finally:
+        if tinha_streamlit:
+            sys.modules["streamlit"] = streamlit_original
+        else:
+            sys.modules.pop("streamlit", None)
+
+
+_SECRETS_EMAIL_VALIDO = {
+    "email_alertas": {"remetente": "nuvem@gmail.com", "senha_app": "zzzz", "destinatario": "nuvem@gmail.com"}
+}
 
 
 def test_sem_arquivo_de_configuracao_nao_notifica_nada():
@@ -186,6 +220,59 @@ def test_varios_alertas_atingidos_ao_mesmo_tempo_notifica_todos():
         assert dados["alertasEnviados"] == {"AXIA3": True, "CPFE3": True}
 
     _com_config_email(_CONFIG_VALIDA, testar)
+
+
+def test_sem_arquivo_local_usa_configuracao_dos_secrets_do_streamlit():
+    """Simula o dashboard hospedado no Streamlit Cloud (2026-08-30): sem o
+    arquivo local (que só existe no seu PC), a configuração vem dos
+    Secrets do próprio app."""
+    def testar():
+        def com_streamlit():
+            assert notif.notificacoes_configuradas() is True
+            dublê = EnviadorFake()
+            dados = {"alertas": {"AXIA3": 50.0}, "alertasEnviados": {}}
+
+            enviados = notif.verificar_e_notificar_alertas(dados, {"AXIA3": 49.0}, enviar_email_fn=dublê)
+
+            assert enviados == 1
+            assert dublê.chamadas[0]["remetente"] == "nuvem@gmail.com"
+
+        _com_streamlit_falso(_SECRETS_EMAIL_VALIDO, com_streamlit)
+
+    _com_config_email(None, testar)
+
+
+def test_arquivo_local_tem_prioridade_sobre_secrets_do_streamlit():
+    """No seu PC, se por acaso os dois existissem, o arquivo local (que é
+    o que você realmente configurou lá) deve vencer."""
+    def testar():
+        def com_streamlit():
+            config = notif._carregar_config()
+            assert config["remetente"] == "voce@gmail.com"  # veio do arquivo local, não dos secrets
+
+        _com_streamlit_falso(_SECRETS_EMAIL_VALIDO, com_streamlit)
+
+    _com_config_email(_CONFIG_VALIDA, testar)
+
+
+def test_secrets_do_streamlit_incompletos_conta_como_nao_configurado():
+    def testar():
+        def com_streamlit():
+            assert notif.notificacoes_configuradas() is False
+
+        _com_streamlit_falso({"email_alertas": {"remetente": "a@a.com"}}, com_streamlit)  # falta senha_app e destinatario
+
+    _com_config_email(None, testar)
+
+
+def test_sem_streamlit_instalado_e_sem_arquivo_local_nao_notifica():
+    def testar():
+        def sem_streamlit():
+            assert notif.notificacoes_configuradas() is False
+
+        _com_streamlit_falso(None, sem_streamlit)
+
+    _com_config_email(None, testar)
 
 
 def test_enviar_email_captura_excecao_de_conexao_e_retorna_false():

@@ -109,6 +109,13 @@ echo    E a janela preta do celular que abriu junto)
 echo ============================================================
 echo.
 
+REM O app agora roda com "headless=true" (necessario para funcionar
+REM hospedado no Streamlit Cloud - ver .streamlit/config.toml), entao o
+REM Streamlit nao abre mais o navegador sozinho. Esta linha abre o
+REM navegador manualmente depois de alguns segundos, pra manter a mesma
+REM experiencia de sempre no seu PC.
+start "" cmd /c "timeout /t 4 /nobreak >nul && start http://localhost:8501"
+
 streamlit run app.py
 
 pause
