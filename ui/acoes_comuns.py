@@ -14,7 +14,7 @@ from datetime import datetime
 import streamlit as st
 
 from core import altman, calculations as calc, piotroski
-from core import cloud_sync, fundamentals, market_data, notificacoes_email, setores
+from core import cloud_sync, fundamentals, market_data, notificacoes_whatsapp, setores
 from core.mobile_snapshot import montar_snapshot_para_celular
 from core.pendencias_celular import (
     aplicar_calculos_teto_do_celular,
@@ -60,11 +60,13 @@ def atualizar_dados(dados: dict, salvar) -> None:
 
     _registrar_snapshot(dados, ibov)
 
-    # E-mail de alerta de preço-alvo (core/notificacoes_email.py) — só faz
-    # algo de verdade se você configurou email_alertas.json; do contrário é
-    # um no-op silencioso, igual à sincronização com o celular acima.
+    # Alerta de preço-alvo por WhatsApp (core/notificacoes_whatsapp.py) —
+    # só faz algo de verdade se você configurou whatsapp_alertas.json; do
+    # contrário é um no-op silencioso, igual à sincronização com o celular
+    # acima. (Substituiu o alerta por e-mail em 2026-08-31 — ver
+    # core/notificacoes_email.py, mantido no projeto mas sem uso ativo.)
     cotacao_por_ticker = {a["ticker"]: a["cotacao_atual"] for a in montar_lista_ativos(dados)}
-    alertas_notificados_agora = notificacoes_email.verificar_e_notificar_alertas(dados, cotacao_por_ticker)
+    alertas_notificados_agora = notificacoes_whatsapp.verificar_e_notificar_alertas(dados, cotacao_por_ticker)
 
     salvar(dados)
 
@@ -92,7 +94,7 @@ def atualizar_dados(dados: dict, salvar) -> None:
         sufixo_celular += f" ⚠️ {total_erros_celular} pedido(s) do celular não puderam ser aplicados (dados inválidos)."
     if alertas_notificados_agora:
         plural = "s" if alertas_notificados_agora > 1 else ""
-        sufixo_celular += f" 📧 {alertas_notificados_agora} alerta{plural} de preço enviado{plural} por e-mail."
+        sufixo_celular += f" 💬 {alertas_notificados_agora} alerta{plural} de preço enviado{plural} por WhatsApp."
 
     if falhas:
         st.session_state["status_cotacoes"] = (

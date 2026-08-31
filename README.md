@@ -114,61 +114,64 @@ você já tinha. Um backup automático dos dados atuais do app é salvo em
 > antes de importar — assim você garante que está trazendo a versão mais
 > atualizada da sua carteira.
 
-### 7. (Opcional) Receber um e-mail quando um alerta de preço for atingido
+### 7. (Opcional) Receber uma mensagem de WhatsApp quando um alerta de preço for atingido
 
-**Novidade (2026-08-30).** Além do selo 🔔/🔕 na coluna Alerta, o app pode
-mandar um e-mail pra você assim que a cotação de um ativo cair até (ou
-abaixo d)o preço configurado em **⚙️ Configurações → 🔔 Alertas de
-Preço-Alvo**. Pesquisei notificação push de verdade no celular antes de
-implementar isso, e ela exigiria o mesmo custo do login do Google (US$99/ano
-no Programa de Desenvolvedor Apple — ver README_MOBILE.md) num iPhone;
-e-mail chega no celular na hora (a maioria já notifica e-mail novo) sem
-nenhum custo, então foi o caminho escolhido.
+**Novidade (2026-08-30, canal trocado para WhatsApp em 2026-08-31).** Além
+do selo 🔔/🔕 na coluna Alerta, o app pode mandar uma mensagem no seu
+WhatsApp assim que a cotação de um ativo cair até (ou abaixo d)o preço
+configurado em **⚙️ Configurações → 🔔 Alertas de Preço-Alvo**.
 
 Essa etapa é 100% opcional — sem configurar nada, o app continua funcionando
-normalmente, só sem o e-mail. **Eu não crio essa conta nem vejo sua senha**:
-você mesmo cria um arquivo de configuração com um editor de texto, seguindo
-os passos abaixo.
+normalmente, só sem a mensagem. Isso usa um serviço gratuito de terceiros
+chamado **CallMeBot** (não é do WhatsApp/Meta) — **eu não crio essa conta
+nem vejo nada seu**: você mesmo ativa em 2 minutos pelo próprio WhatsApp e
+cria um arquivo de configuração com um editor de texto, seguindo os passos
+abaixo.
 
-1. No Gmail que você quer usar para enviar o alerta, ative a "Verificação em
-   duas etapas" (se ainda não tiver): [myaccount.google.com/security](https://myaccount.google.com/security).
-   O Gmail exige isso antes de liberar uma "senha de app" — é o passo
-   seguinte.
-2. Ainda em [myaccount.google.com/security](https://myaccount.google.com/security),
-   procure "Senhas de app" (App Passwords), crie uma nova (pode chamar de
-   "Meu Portfólio B3") e copie a senha de 16 letras que aparece. **Essa não é
-   a sua senha normal do Gmail** — é uma senha específica só para este uso,
-   que você pode revogar a qualquer momento sem afetar sua conta.
-3. Abra o Bloco de Notas do Windows e cole o texto abaixo, trocando pelos
-   seus dados (o `destinatario` pode ser o mesmo e-mail do `remetente`, se
-   quiser receber no mesmo Gmail que envia):
+1. No seu celular, salve este número nos contatos, com qualquer nome (ex:
+   "Robô Alertas"): **+34 694 23 41 84**
+2. Mande para esse contato, pelo WhatsApp, exatamente esta mensagem:
+   ```
+   I allow callmebot to send me messages
+   ```
+3. Em até 2 minutos ele responde com uma "apikey" (um número). Guarde-a —
+   é a sua chave pessoal. (Se não chegar em 2 minutos, espere 24h e tente
+   de novo.)
+4. Abra o Bloco de Notas do Windows e cole o texto abaixo, trocando pelos
+   seus dados (`numero` é o seu próprio WhatsApp, com código do país):
    ```json
    {
-       "remetente": "seuemail@gmail.com",
-       "senha_app": "a senha de 16 letras do passo 2, com ou sem espaços",
-       "destinatario": "seuemail@gmail.com"
+       "numero": "+5511999999999",
+       "apikey": "a apikey que o CallMeBot te mandou no passo 3"
    }
    ```
-4. Salve esse arquivo como `email_alertas.json` (no Bloco de Notas, escolha
-   "Salvar como", tipo "Todos os arquivos", e cole o caminho completo abaixo
-   no campo de nome do arquivo — troque `SeuUsuario` pelo nome de usuário do
-   seu Windows):
+5. Salve esse arquivo como `whatsapp_alertas.json` (no Bloco de Notas,
+   escolha "Salvar como", tipo "Todos os arquivos", e cole o caminho
+   completo abaixo no campo de nome do arquivo — troque `SeuUsuario` pelo
+   nome de usuário do seu Windows):
    ```
-   C:\Users\SeuUsuario\.portfolio_b3_secrets\email_alertas.json
+   C:\Users\SeuUsuario\.portfolio_b3_secrets\whatsapp_alertas.json
    ```
    Essa é a mesma pasta oculta (fora da pasta do projeto) onde já fica a
    chave do Firebase, se você configurou o celular — se a pasta não
    existir ainda, crie-a antes (no Explorador de Arquivos, cole
    `C:\Users\SeuUsuario\.portfolio_b3_secrets` na barra de endereço e
    confirme criar a pasta).
-5. Feche e abra o app de novo (janela preta do "Iniciar App.bat") pra ele
+6. Feche e abra o app de novo (janela preta do "Iniciar App.bat") pra ele
    ler o arquivo novo. Na próxima vez que clicar em "🔄 Atualizar Dados" (ou
-   "🔄 Atualizar Cotações") com algum alerta atingido, o e-mail é enviado.
+   "🔄 Atualizar Cotações") com algum alerta atingido, a mensagem é enviada.
 
-Cada alerta manda só UM e-mail por queda — se o preço voltar a subir acima
-do seu alvo e cair de novo depois, um novo e-mail é enviado nessa próxima
-queda (não fica repetindo o mesmo e-mail a cada "Atualizar Dados" enquanto
-o preço não se mexe).
+Cada alerta manda só UMA mensagem por queda — se o preço voltar a subir
+acima do seu alvo e cair de novo depois, uma nova mensagem é enviada nessa
+próxima queda (não fica repetindo a mesma mensagem a cada "Atualizar
+Dados" enquanto o preço não se mexe). Por ser um serviço gratuito e
+informal, o CallMeBot pode ocasionalmente ficar fora do ar — se os
+alertas pararem de chegar do nada, vale suspeitar disso primeiro (o app
+em si continua funcionando normalmente).
+
+> O projeto também tem um alerta por e-mail (`core/notificacoes_email.py`),
+> da versão anterior a esta mudança — o código continua no projeto, só não
+> está mais em uso.
 
 ### 8. (Opcional) Hospedar o dashboard na nuvem, acessível de qualquer lugar
 
@@ -176,6 +179,14 @@ o preço não se mexe).
 hospedado de graça no Streamlit Community Cloud, com um link acessível de
 qualquer navegador (celular incluso), sem precisar do seu PC ligado. Veja
 o passo a passo completo em `README_HOSPEDAGEM.md`.
+
+### 9. (Opcional) Verificar alertas de preço em segundo plano, mesmo com o PC desligado
+
+**Novidade (2026-08-31).** Além do alerta que dispara quando você clica em
+"🔄 Atualizar Dados", um robô pode rodar sozinho de hora em hora (durante o
+pregão da B3), de graça, pelo GitHub Actions — útil pra quando ninguém abre
+o app num dia em que um alerta seria atingido. Veja o passo a passo
+completo em `README_ALERTAS_SEGUNDO_PLANO.md`.
 
 ## Estrutura do projeto
 
@@ -190,7 +201,8 @@ PortfolioApp/
 │   ├── cloud_sync.py      # sincronização com o Firestore (celular + dashboard hospedado)
 │   ├── calculations.py    # preço médio, preço teto, IR, TWR, FCD...
 │   ├── market_data.py     # busca de cotações via yfinance (com cache)
-│   ├── notificacoes_email.py  # e-mail de alerta de preço-alvo (opcional)
+│   ├── notificacoes_whatsapp.py  # alerta de preço-alvo por WhatsApp (opcional)
+│   ├── notificacoes_email.py  # alerta por e-mail (versão anterior, sem uso ativo)
 │   └── formatting.py      # formatação de R$ e % no padrão brasileiro
 ├── ui/                    # uma função de renderização por aba
 │   ├── visao_geral.py, carteira.py, compras.py, proventos.py,
@@ -198,6 +210,10 @@ PortfolioApp/
 │   ├── ativos.py          # monta a lista combinada de posições + alvo
 │   ├── acoes_comuns.py    # atualização de cotações (botão "Atualizar Dados")
 │   └── styles.py          # CSS dos cards/badges
+├── scripts/
+│   └── verificar_alertas_segundo_plano.py  # roda no GitHub Actions (ver README_ALERTAS_SEGUNDO_PLANO.md)
+├── .github/workflows/
+│   └── verificar_alertas.yml  # agendamento do robô de alertas (hora em hora, no pregão)
 ├── gerar_secrets_streamlit.py  # gera o texto de Secrets para hospedar no Streamlit Cloud (ver README_HOSPEDAGEM.md)
 └── data/
     └── portfolio_data.json  # seus dados (criado automaticamente)

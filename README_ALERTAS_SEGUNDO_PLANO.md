@@ -1,16 +1,15 @@
-# Alertas de preço em segundo plano (GitHub Actions)
+# Alertas de preço em segundo plano (GitHub Actions + WhatsApp)
 
-Até agora, o e-mail de alerta de preço-alvo só era verificado quando
-**alguém clicava em "🔄 Atualizar Dados"** — no seu PC ou num dos
-dashboards hospedados. Se ninguém abrisse o app num dia em que uma ação
-caiu até o preço-alvo, você só ficaria sabendo quando abrisse o app de
-novo.
+Até agora, o alerta de preço-alvo só era verificado quando **alguém
+clicava em "🔄 Atualizar Dados"** — no seu PC ou num dos dashboards
+hospedados. Se ninguém abrisse o app num dia em que uma ação caiu até o
+preço-alvo, você só ficaria sabendo quando abrisse o app de novo.
 
 Esta parte resolve isso: um robozinho roda sozinho, de hora em hora
 (durante o horário do pregão da B3, de segunda a sexta), busca as
-cotações e manda o e-mail de alerta na hora — mesmo com o PC desligado e
-sem ninguém olhando o dashboard. Ele roda numa máquina do GitHub (de
-graça), não no seu computador.
+cotações e manda uma mensagem no seu **WhatsApp** na hora — mesmo com o
+PC desligado e sem ninguém olhando o dashboard. Ele roda numa máquina do
+GitHub (de graça), não no seu computador.
 
 ## Antes de começar
 
@@ -18,58 +17,65 @@ Isso só funciona depois de:
 
 1. O repositório já estar publicado no GitHub (feito).
 2. O celular/Firestore já estar configurado — isto é, você já tem o
-   arquivo `firebase-service-account.json` (ver README_MOBILE.md).
-3. O e-mail de alerta já estar configurado no seu PC — isto é, você já
-   tem o arquivo `email_alertas.json` (feito, se você já recebeu algum
-   alerta por e-mail antes).
+   arquivo `firebase-service-account.json` em `~/.portfolio_b3_secrets`
+   (ver README_MOBILE.md).
 
-Ambos os arquivos ficam na mesma pasta pessoal e protegida de sempre:
-`~/.portfolio_b3_secrets` (fora da pasta do projeto).
+## Por que WhatsApp em vez de e-mail?
 
-## Por que preciso colar essas informações de novo?
+O projeto tinha originalmente um alerta por e-mail (ver
+`core/notificacoes_email.py` — o código continua no projeto, só não é mais
+usado), mas configurar exigia ativar a "Verificação em duas etapas" no
+Google e gerar uma "senha de app". O WhatsApp é bem mais rápido: você só
+manda uma mensagem para um número e recebe uma chave na hora.
 
-O robozinho do GitHub Actions roda numa máquina nova a cada vez — sem a
-sua pasta pessoal, sem o Firebase já conectado. Por isso ele precisa de
-uma cópia dessas mesmas informações, guardada num cofre separado e
-protegido do próprio GitHub, chamado **"Secrets"** (a mesma ideia já usada
-no Passo 1 de README_HOSPEDAGEM.md, só que agora no GitHub em vez do
-Streamlit Cloud) — nunca no código, nunca visível para ninguém depois de
-salvo (nem para você mesmo — só dá pra substituir, não pra ver de novo).
+**Um detalhe importante para saber**: isso funciona através de um serviço
+gratuito de terceiros chamado **CallMeBot** (não é do WhatsApp/Meta) — ele
+é confiável na maior parte do tempo, mas por ser gratuito e informal, pode
+ocasionalmente ficar fora do ar por um tempo. Se um dia os alertas
+pararem de chegar do nada, vale suspeitar disso antes de qualquer outra
+coisa (o alerta na tela do app, ao abrir "Atualizar Dados", sempre
+continua funcionando normalmente, independente disso).
 
-## Passo 1: abrir os dois arquivos que você já tem
+## Passo 1: ativar o CallMeBot no seu WhatsApp
 
-1. Abra a pasta `~/.portfolio_b3_secrets` no seu computador (no Explorador
-   de Arquivos, cole `%USERPROFILE%\.portfolio_b3_secrets` na barra de
-   endereço e aperte Enter).
-2. Abra `firebase-service-account.json` com o Bloco de Notas — deixe essa
-   janela aberta.
-3. Abra `email_alertas.json` com o Bloco de Notas também — deixe essa
-   janela aberta também.
+1. No seu celular, salve este número nos contatos, com qualquer nome
+   (ex: "Robô Alertas"): **+34 694 23 41 84**
+2. Abra o WhatsApp e mande para esse contato, exatamente, esta mensagem
+   (copie e cole, sem mudar nada):
 
-## Passo 2: criar os 4 Secrets no GitHub
+   ```
+   I allow callmebot to send me messages
+   ```
 
-1. Acesse
+3. Em até 2 minutos, ele responde com uma mensagem parecida com:
+
+   ```
+   API Activated for your phone number. Your APIKEY is 123456
+   ```
+
+   Guarde esse número (a "apikey") — é a sua chave pessoal.
+
+   Se não chegar nada em 2 minutos, espere 24h e tente de novo (limitação
+   do próprio serviço gratuito).
+
+## Passo 2: criar os 3 Secrets no GitHub
+
+1. Abra `~/.portfolio_b3_secrets` no seu PC (cole
+   `%USERPROFILE%\.portfolio_b3_secrets` na barra de endereço do
+   Explorador de Arquivos) e deixe aberto, no Bloco de Notas, o arquivo
+   `firebase-service-account.json`.
+2. Acesse
    [https://github.com/dgcr2711-cloud/PortfolioApp/settings/secrets/actions](https://github.com/dgcr2711-cloud/PortfolioApp/settings/secrets/actions)
    (entre com sua conta do GitHub, se pedir).
-2. Clique em **"New repository secret"**.
-3. Crie o primeiro, com estes valores exatos:
-   - **Name**: `FIREBASE_SERVICE_ACCOUNT_JSON`
-   - **Secret**: cole **todo o conteúdo** do arquivo
-     `firebase-service-account.json` (Ctrl+A, Ctrl+C nele, Ctrl+V aqui) —
-     o arquivo inteiro, com as chaves `{ }` e tudo mais.
-4. Clique em **"Add secret"**.
-5. Repita "New repository secret" mais 3 vezes, uma para cada linha do
-   arquivo `email_alertas.json`:
-   - **Name**: `EMAIL_ALERTA_REMETENTE` — **Secret**: o valor de
-     `"remetente"` nesse arquivo (só o e-mail, sem aspas).
-   - **Name**: `EMAIL_ALERTA_SENHA_APP` — **Secret**: o valor de
-     `"senha_app"` nesse arquivo (só a senha de app, sem aspas).
-   - **Name**: `EMAIL_ALERTA_DESTINATARIO` — **Secret**: o valor de
-     `"destinatario"` nesse arquivo (só o e-mail, sem aspas).
+3. Clique em **"New repository secret"** 3 vezes, uma para cada um destes:
 
-Ao final, a tela deve mostrar 4 Secrets cadastrados:
-`FIREBASE_SERVICE_ACCOUNT_JSON`, `EMAIL_ALERTA_REMETENTE`,
-`EMAIL_ALERTA_SENHA_APP` e `EMAIL_ALERTA_DESTINATARIO`. Você não consegue
+   | Name (nome do Secret) | Secret (valor a colar) |
+   |---|---|
+   | `FIREBASE_SERVICE_ACCOUNT_JSON` | todo o conteúdo do arquivo `firebase-service-account.json` |
+   | `WHATSAPP_ALERTA_NUMERO` | o seu número de WhatsApp, com código do país (ex: `+5511999999999`) |
+   | `WHATSAPP_ALERTA_APIKEY` | a apikey que o CallMeBot te mandou no Passo 1 |
+
+Ao final, a tela deve mostrar 3 Secrets cadastrados. Você não consegue
 mais ver o conteúdo deles depois de salvos (só apagar e recadastrar, se
 precisar trocar algum) — isso é proposital, é assim que o GitHub protege
 esse cofre.
@@ -79,7 +85,7 @@ esse cofre.
 Não precisa esperar até a próxima hora cheia para saber se funcionou:
 
 1. Acesse
-   [https://github.com/dgcr2711-cloud/PortfolioApp/actions/workflows/verificar_alertas.yml](https://github.com/dgcr2711-cloud/PortfolioApp/actions/workflows/verificar_alertas.yml).
+   [https://github.com/dgcr2711-cloud/PortfolioApp/actions/workflows/verificar_alertas.yml](https://github.com/dgcr2711-cloud/PortfolioApp/actions/workflows/verificar_alertas.yml)
 2. Clique no botão **"Run workflow"** (do lado direito), depois no botão
    verde **"Run workflow"** que aparece.
 3. Espere uns 10-20 segundos e atualize a página — vai aparecer uma
@@ -87,7 +93,7 @@ Não precisa esperar até a próxima hora cheia para saber se funcionou:
    verde (deu certo) ou vermelha (deu erro).
 4. Clique nela para ver os detalhes — dentro de "Rodar a verificação de
    alertas" aparece uma mensagem tipo `[alertas] Verificação concluída. 0
-   alerta(s) de e-mail enviado(s).` (0 é o normal, se nenhum dos seus
+   mensagem(ns) de WhatsApp enviada(s).` (0 é o normal, se nenhum dos seus
    alertas configurados tiver sido atingido agora).
 
 Se a bolinha ficar vermelha, me manda um print da tela de detalhes que eu
@@ -96,20 +102,21 @@ te ajudo a diagnosticar.
 ## Coisas para saber
 
 - **Horário**: roda de hora em hora, das 10h às 18h (horário de
-  Brasília), de segunda a sexta — cobrindo o pregão da B3. Fora desse
-  horário, nenhuma cotação nova estaria disponível mesmo, então não faz
-  sentido rodar.
+  Brasília), de segunda a sexta — cobrindo o pregão da B3.
 - **Custo**: zero. O GitHub Actions é de graça para repositórios
-  públicos, sem limite de execuções.
+  públicos; o CallMeBot também é gratuito (só para uso pessoal, que é
+  exatamente o seu caso).
 - **Isso substitui o alerta de "Atualizar Dados"?** Não — os dois
-  continuam funcionando, um não interfere no outro. Este aqui só cobre os
-  horários em que ninguém abriu o app manualmente.
-- **Onde ver o histórico de execuções**: sempre em
-  [https://github.com/dgcr2711-cloud/PortfolioApp/actions/workflows/verificar_alertas.yml](https://github.com/dgcr2711-cloud/PortfolioApp/actions/workflows/verificar_alertas.yml).
-- **Se um dia quiser trocar a senha de app do e-mail ou a chave do
-  Firebase**: apague o Secret antigo correspondente em
+  continuam funcionando (e ambos já usam WhatsApp agora), um não
+  interfere no outro. Este aqui só cobre os horários em que ninguém abriu
+  o app manualmente.
+- **Onde ver o histórico de execuções**:
+  [https://github.com/dgcr2711-cloud/PortfolioApp/actions/workflows/verificar_alertas.yml](https://github.com/dgcr2711-cloud/PortfolioApp/actions/workflows/verificar_alertas.yml)
+- **Se um dia quiser trocar de número ou a apikey parar de funcionar**:
+  refaça o Passo 1 (a mensagem de ativação pode ser mandada de novo a
+  qualquer momento) e depois apague e recadastre o Secret
+  `WHATSAPP_ALERTA_APIKEY` em
   [https://github.com/dgcr2711-cloud/PortfolioApp/settings/secrets/actions](https://github.com/dgcr2711-cloud/PortfolioApp/settings/secrets/actions)
-  e cadastre um novo com o mesmo nome e o valor atualizado.
-- **Nunca cole o conteúdo desses arquivos aqui no chat comigo** — os
-  Secrets do GitHub são o único lugar onde essas informações devem ir a
-  partir de agora.
+- **Nunca cole o conteúdo desses arquivos nem a sua apikey aqui no chat
+  comigo** — os Secrets do GitHub são o único lugar onde essas
+  informações devem ir a partir de agora.

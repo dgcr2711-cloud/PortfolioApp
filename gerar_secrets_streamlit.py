@@ -29,6 +29,7 @@ from typing import Any
 from core.cloud_sync import CAMINHO_CHAVE_FIREBASE
 from core.config import PASTA_SEGREDOS
 from core.notificacoes_email import CAMINHO_CONFIG_EMAIL
+from core.notificacoes_whatsapp import CAMINHO_CONFIG_WHATSAPP
 
 NOME_ARQUIVO_SAIDA = "secrets_streamlit_gerado.txt"
 
@@ -88,6 +89,19 @@ def gerar_texto_secrets() -> str:
     else:
         blocos.append("")
         blocos.append(f"# Nenhuma configuração de e-mail encontrada em {CAMINHO_CONFIG_EMAIL} (alerta por e-mail não configurado ainda)")
+
+    if CAMINHO_CONFIG_WHATSAPP.exists():
+        try:
+            with open(CAMINHO_CONFIG_WHATSAPP, "r", encoding="utf-8") as f:
+                config_whatsapp = json.load(f)
+            blocos.append("")
+            blocos.append(_secao_toml("whatsapp_alertas", config_whatsapp))
+        except (OSError, json.JSONDecodeError) as erro:
+            blocos.append("")
+            blocos.append(f"# Não consegui ler {CAMINHO_CONFIG_WHATSAPP}: {erro}")
+    else:
+        blocos.append("")
+        blocos.append(f"# Nenhuma configuração de WhatsApp encontrada em {CAMINHO_CONFIG_WHATSAPP} (alerta por WhatsApp não configurado ainda)")
 
     return "\n".join(blocos) + "\n"
 

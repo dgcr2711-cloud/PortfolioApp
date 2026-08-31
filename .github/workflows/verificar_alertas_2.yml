@@ -32,7 +32,6 @@ jobs:
       - name: Rodar a verificação de alertas
         env:
           FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
-          EMAIL_ALERTA_REMETENTE: ${{ secrets.EMAIL_ALERTA_REMETENTE }}
-          EMAIL_ALERTA_SENHA_APP: ${{ secrets.EMAIL_ALERTA_SENHA_APP }}
-          EMAIL_ALERTA_DESTINATARIO: ${{ secrets.EMAIL_ALERTA_DESTINATARIO }}
+          WHATSAPP_ALERTA_NUMERO: ${{ secrets.WHATSAPP_ALERTA_NUMERO }}
+          WHATSAPP_ALERTA_APIKEY: ${{ secrets.WHATSAPP_ALERTA_APIKEY }}
         run: python scripts/verificar_alertas_segundo_plano.py
