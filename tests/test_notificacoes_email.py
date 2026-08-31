@@ -16,6 +16,7 @@ Rode com `pytest -v` (ver instruções em tests/test_calculations.py).
 from __future__ import annotations
 
 import json
+import os
 import sys
 import tempfile
 from pathlib import Path
@@ -273,6 +274,125 @@ def test_sem_streamlit_instalado_e_sem_arquivo_local_nao_notifica():
         _com_streamlit_falso(None, sem_streamlit)
 
     _com_config_email(None, testar)
+
+
+def _com_variaveis_de_ambiente_email(valores: dict[str, str] | None, testar):
+    """
+    Define (ou remove) as variáveis de ambiente EMAIL_ALERTA_* durante a
+    chamada de `testar`, e sempre restaura o estado original — mesmo se
+    `testar` lançar. `valores=None` garante que nenhuma delas exista.
+    """
+    nomes = [
+        "EMAIL_ALERTA_REMETENTE", "EMAIL_ALERTA_SENHA_APP", "EMAIL_ALERTA_DESTINATARIO",
+        "EMAIL_ALERTA_SERVIDOR_SMTP", "EMAIL_ALERTA_PORTA_SMTP",
+    ]
+    originais = {nome: os.environ.get(nome) for nome in nomes}
+    for nome in nomes:
+        os.environ.pop(nome, None)
+    if valores:
+        os.environ.update(valores)
+    try:
+        testar()
+    finally:
+        for nome, valor in originais.items():
+            if valor is None:
+                os.environ.pop(nome, None)
+            else:
+                os.environ[nome] = valor
+
+
+_VARS_EMAIL_VALIDAS = {
+    "EMAIL_ALERTA_REMETENTE": "acoes@gmail.com",
+    "EMAIL_ALERTA_SENHA_APP": "abcd efgh ijkl mnop",
+    "EMAIL_ALERTA_DESTINATARIO": "acoes@gmail.com",
+}
+
+
+def test_sem_variaveis_de_ambiente_nao_encontra_configuracao():
+    def testar():
+        assert notif._carregar_config_da_variavel_de_ambiente() is None
+
+    _com_variaveis_de_ambiente_email(None, testar)
+
+
+def test_variaveis_de_ambiente_incompletas_nao_encontra_configuracao():
+    def testar():
+        assert notif._carregar_config_da_variavel_de_ambiente() is None
+
+    _com_variaveis_de_ambiente_email({"EMAIL_ALERTA_REMETENTE": "a@a.com"}, testar)  # falta senha_app e destinatario
+
+
+def test_variaveis_de_ambiente_completas_devolve_a_configuracao():
+    def testar():
+        config = notif._carregar_config_da_variavel_de_ambiente()
+        assert config == {
+            "remetente": "acoes@gmail.com",
+            "senha_app": "abcd efgh ijkl mnop",
+            "destinatario": "acoes@gmail.com",
+        }
+
+    _com_variaveis_de_ambiente_email(_VARS_EMAIL_VALIDAS, testar)
+
+
+def test_variaveis_de_ambiente_com_servidor_e_porta_smtp_customizados():
+    def testar():
+        config = notif._carregar_config_da_variavel_de_ambiente()
+        assert config["servidor_smtp"] == "smtp.outro-provedor.com"
+        assert config["porta_smtp"] == 587
+
+    valores = dict(_VARS_EMAIL_VALIDAS)
+    valores["EMAIL_ALERTA_SERVIDOR_SMTP"] = "smtp.outro-provedor.com"
+    valores["EMAIL_ALERTA_PORTA_SMTP"] = "587"
+    _com_variaveis_de_ambiente_email(valores, testar)
+
+
+def test_variavel_de_ambiente_com_porta_smtp_invalida_ignora_e_usa_padrao():
+    def testar():
+        config = notif._carregar_config_da_variavel_de_ambiente()
+        assert "porta_smtp" not in config  # cai no padrão de enviar_email()
+
+    valores = dict(_VARS_EMAIL_VALIDAS)
+    valores["EMAIL_ALERTA_PORTA_SMTP"] = "não-é-um-número"
+    _com_variaveis_de_ambiente_email(valores, testar)
+
+
+def test_script_de_segundo_plano_usa_configuracao_das_variaveis_de_ambiente():
+    """Simula o script do GitHub Actions: sem arquivo local nem Streamlit,
+    a configuração vem das variáveis de ambiente e os alertas funcionam
+    normalmente."""
+    def testar():
+        assert notif.notificacoes_configuradas() is True
+        dublê = EnviadorFake()
+        dados = {"alertas": {"AXIA3": 50.0}, "alertasEnviados": {}}
+
+        enviados = notif.verificar_e_notificar_alertas(dados, {"AXIA3": 49.0}, enviar_email_fn=dublê)
+
+        assert enviados == 1
+        assert dublê.chamadas[0]["remetente"] == "acoes@gmail.com"
+
+    def sem_streamlit():
+        _com_variaveis_de_ambiente_email(_VARS_EMAIL_VALIDAS, testar)
+
+    _com_config_email(None, lambda: _com_streamlit_falso(None, sem_streamlit))
+
+
+def test_arquivo_local_tem_prioridade_sobre_variavel_de_ambiente():
+    def testar():
+        config = notif._carregar_config()
+        assert config["remetente"] == "voce@gmail.com"  # veio do arquivo local, não da variável de ambiente
+
+    _com_config_email(_CONFIG_VALIDA, lambda: _com_variaveis_de_ambiente_email(_VARS_EMAIL_VALIDAS, testar))
+
+
+def test_variavel_de_ambiente_tem_prioridade_sobre_secrets_do_streamlit():
+    def testar():
+        def com_streamlit():
+            config = notif._carregar_config()
+            assert config["remetente"] == "acoes@gmail.com"  # veio da variável de ambiente, não dos secrets
+
+        _com_streamlit_falso(_SECRETS_EMAIL_VALIDO, com_streamlit)
+
+    _com_config_email(None, lambda: _com_variaveis_de_ambiente_email(_VARS_EMAIL_VALIDAS, testar))
 
 
 def test_enviar_email_captura_excecao_de_conexao_e_retorna_false():

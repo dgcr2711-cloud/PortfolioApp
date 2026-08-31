@@ -1,0 +1,38 @@
+name: Verificar alertas de preço em segundo plano
+
+# Roda sozinho, num horário fixo, mesmo que ninguém abra o app naquele
+# momento — ver scripts/verificar_alertas_segundo_plano.py para o que o
+# script faz e README_ALERTAS_SEGUNDO_PLANO.md para o passo a passo de
+# como configurar os 3 Secrets obrigatórios deste repositório.
+#
+# Horário: de hora em hora, das 10h às 18h (horário de Brasília), de
+# segunda a sexta — cobrindo o pregão da B3 (aproximadamente 10h-17h/18h).
+# Cron do GitHub Actions é sempre em UTC; Brasília = UTC-3 o ano todo (sem
+# horário de verão desde 2019), então 10h-18h BRT = 13h-21h UTC.
+on:
+  schedule:
+    - cron: "0 13-21 * * 1-5"
+  workflow_dispatch: {}  # permite rodar manualmente em Actions -> Verificar alertas de preço em segundo plano -> Run workflow
+
+jobs:
+  verificar-alertas:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Baixar o código do repositório
+        uses: actions/checkout@v4
+
+      - name: Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Instalar as bibliotecas do projeto
+        run: pip install -r requirements.txt
+
+      - name: Rodar a verificação de alertas
+        env:
+          FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+          EMAIL_ALERTA_REMETENTE: ${{ secrets.EMAIL_ALERTA_REMETENTE }}
+          EMAIL_ALERTA_SENHA_APP: ${{ secrets.EMAIL_ALERTA_SENHA_APP }}
+          EMAIL_ALERTA_DESTINATARIO: ${{ secrets.EMAIL_ALERTA_DESTINATARIO }}
+        run: python scripts/verificar_alertas_segundo_plano.py

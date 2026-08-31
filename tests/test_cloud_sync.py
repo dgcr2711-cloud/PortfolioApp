@@ -17,6 +17,8 @@ Rode com `pytest -v` (ver instruções em tests/test_calculations.py).
 
 from __future__ import annotations
 
+import json
+import os
 import sys
 
 from core import cloud_sync
@@ -81,6 +83,55 @@ def test_com_credenciais_configuradas_nos_secrets_devolve_o_dicionario():
         assert resultado == _CHAVE_FIREBASE_FALSA
 
     _com_streamlit_falso({"firebase_service_account": _CHAVE_FIREBASE_FALSA}, testar)
+
+
+def _com_variavel_de_ambiente(nome: str, valor: str | None, testar):
+    """Define (ou remove) uma variável de ambiente durante a chamada de
+    `testar`, e sempre restaura o valor original — mesmo se `testar` lançar."""
+    tinha = nome in os.environ
+    original = os.environ.get(nome)
+    if valor is None:
+        os.environ.pop(nome, None)
+    else:
+        os.environ[nome] = valor
+    try:
+        testar()
+    finally:
+        if tinha:
+            os.environ[nome] = original
+        else:
+            os.environ.pop(nome, None)
+
+
+def test_sem_variavel_de_ambiente_nao_encontra_credenciais():
+    def testar():
+        assert cloud_sync._obter_credenciais_dict_da_variavel_de_ambiente() is None
+
+    _com_variavel_de_ambiente("FIREBASE_SERVICE_ACCOUNT_JSON", None, testar)
+
+
+def test_variavel_de_ambiente_com_json_valido_devolve_o_dicionario():
+    def testar():
+        resultado = cloud_sync._obter_credenciais_dict_da_variavel_de_ambiente()
+        assert resultado == _CHAVE_FIREBASE_FALSA
+
+    _com_variavel_de_ambiente(
+        "FIREBASE_SERVICE_ACCOUNT_JSON", json.dumps(_CHAVE_FIREBASE_FALSA), testar
+    )
+
+
+def test_variavel_de_ambiente_com_json_invalido_nao_quebra():
+    def testar():
+        assert cloud_sync._obter_credenciais_dict_da_variavel_de_ambiente() is None
+
+    _com_variavel_de_ambiente("FIREBASE_SERVICE_ACCOUNT_JSON", "{isto não é json válido", testar)
+
+
+def test_variavel_de_ambiente_com_json_que_nao_e_um_objeto_nao_quebra():
+    def testar():
+        assert cloud_sync._obter_credenciais_dict_da_variavel_de_ambiente() is None
+
+    _com_variavel_de_ambiente("FIREBASE_SERVICE_ACCOUNT_JSON", "[1, 2, 3]", testar)
 
 
 def test_erro_inesperado_ao_ler_secrets_do_streamlit_nao_quebra():

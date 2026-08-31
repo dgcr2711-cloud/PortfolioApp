@@ -35,6 +35,8 @@ biblioteca a mais instalada; nada muda no comportamento.
 
 from __future__ import annotations
 
+import json
+import os
 import shutil
 import stat
 from typing import Any
@@ -119,6 +121,36 @@ def sincronizacao_configurada() -> bool:
     return CAMINHO_CHAVE_FIREBASE.exists() or _CAMINHO_CHAVE_FIREBASE_ANTIGO.exists()
 
 
+_VARIAVEL_AMBIENTE_CHAVE_FIREBASE = "FIREBASE_SERVICE_ACCOUNT_JSON"
+
+
+def _obter_credenciais_dict_da_variavel_de_ambiente() -> dict[str, Any] | None:
+    """
+    Fallback usado pelo script de segundo plano do GitHub Actions
+    (2026-08-30 — ver scripts/verificar_alertas_segundo_plano.py e
+    .github/workflows/verificar_alertas.yml): lá não existe nem a pasta
+    pessoal do PC nem um app Streamlit de verdade rodando (então nem a
+    chave em arquivo nem os Secrets do Streamlit Cloud estão disponíveis),
+    então a chave do Firebase é colada inteira, como texto JSON numa linha
+    só, num "Secret" do próprio repositório do GitHub (Settings -> Secrets
+    and variables -> Actions -> New repository secret), sob o nome
+    FIREBASE_SERVICE_ACCOUNT_JSON — nunca no código, nunca commitado.
+
+    Retorna None sem erro nenhum se a variável não existir (uso normal no
+    PC ou num app Streamlit hospedado) ou se o conteúdo não for um JSON
+    válido (erro de configuração — melhor cair no "não configurado" do que
+    quebrar o script inteiro).
+    """
+    bruto = os.environ.get(_VARIAVEL_AMBIENTE_CHAVE_FIREBASE)
+    if not bruto:
+        return None
+    try:
+        credenciais = json.loads(bruto)
+    except json.JSONDecodeError:
+        return None
+    return credenciais if isinstance(credenciais, dict) else None
+
+
 def _obter_credenciais_dict_do_streamlit() -> dict[str, Any] | None:
     """
     Fallback usado quando este código roda HOSPEDADO no Streamlit Community
@@ -147,9 +179,11 @@ def _garantir_firebase_inicializado() -> bool:
     """
     Inicializa a conexão com o Firebase uma única vez por execução do app.
     Tenta, nesta ordem: (1) a chave em arquivo local (uso normal no seu
-    PC), (2) os "Secrets" do Streamlit Cloud (uso hospedado, 2026-08-30 —
-    ver _obter_credenciais_dict_do_streamlit). Retorna False se nenhuma das
-    duas estiver disponível.
+    PC), (2) a variável de ambiente FIREBASE_SERVICE_ACCOUNT_JSON (script
+    de segundo plano no GitHub Actions, 2026-08-30 — ver
+    _obter_credenciais_dict_da_variavel_de_ambiente), (3) os "Secrets" do
+    Streamlit Cloud (uso hospedado — ver _obter_credenciais_dict_do_streamlit).
+    Retorna False se nenhuma das três estiver disponível.
     """
     global _app_inicializado
     if _app_inicializado:
@@ -162,10 +196,14 @@ def _garantir_firebase_inicializado() -> bool:
         caminho_chave = CAMINHO_CHAVE_FIREBASE if CAMINHO_CHAVE_FIREBASE.exists() else _CAMINHO_CHAVE_FIREBASE_ANTIGO
         origem_credenciais: str | dict[str, Any] = str(caminho_chave)
     else:
-        credenciais_do_streamlit = _obter_credenciais_dict_do_streamlit()
-        if credenciais_do_streamlit is None:
-            return False
-        origem_credenciais = credenciais_do_streamlit
+        credenciais_do_ambiente = _obter_credenciais_dict_da_variavel_de_ambiente()
+        if credenciais_do_ambiente is not None:
+            origem_credenciais = credenciais_do_ambiente
+        else:
+            credenciais_do_streamlit = _obter_credenciais_dict_do_streamlit()
+            if credenciais_do_streamlit is None:
+                return False
+            origem_credenciais = credenciais_do_streamlit
 
     import firebase_admin
     from firebase_admin import credentials

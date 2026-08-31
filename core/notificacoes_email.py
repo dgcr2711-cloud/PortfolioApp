@@ -33,6 +33,7 @@ justamente pra nunca ser copiada/enviada por engano junto com o projeto.
 from __future__ import annotations
 
 import json
+import os
 import smtplib
 from email.mime.text import MIMEText
 from typing import Any, Callable
@@ -56,14 +57,62 @@ def _config_tem_campos_obrigatorios(config: dict[str, Any]) -> bool:
 
 def _carregar_config() -> dict[str, Any] | None:
     """
-    Carrega a configuração de e-mail — do arquivo local (uso normal no seu
-    PC) se existir e for válido, senão dos "Secrets" do Streamlit Cloud
-    (uso hospedado, 2026-08-30 — ver _carregar_config_do_streamlit).
+    Carrega a configuração de e-mail, nesta ordem: (1) do arquivo local
+    (uso normal no seu PC), (2) das variáveis de ambiente (script de
+    segundo plano no GitHub Actions, 2026-08-30 — ver
+    _carregar_config_da_variavel_de_ambiente), (3) dos "Secrets" do
+    Streamlit Cloud (uso hospedado — ver _carregar_config_do_streamlit).
     """
     config = _carregar_config_do_arquivo()
     if config is not None:
         return config
+    config = _carregar_config_da_variavel_de_ambiente()
+    if config is not None:
+        return config
     return _carregar_config_do_streamlit()
+
+
+def _carregar_config_da_variavel_de_ambiente() -> dict[str, Any] | None:
+    """
+    Fallback usado pelo script de segundo plano do GitHub Actions
+    (2026-08-30 — ver scripts/verificar_alertas_segundo_plano.py e
+    .github/workflows/verificar_alertas.yml): lá não existe nem a pasta
+    pessoal do PC nem um app Streamlit de verdade rodando, então a
+    configuração de e-mail vem de "Secrets" do próprio repositório do
+    GitHub (Settings -> Secrets and variables -> Actions), expostos ao
+    script como variáveis de ambiente — nunca no código, nunca commitado:
+
+        EMAIL_ALERTA_REMETENTE
+        EMAIL_ALERTA_SENHA_APP
+        EMAIL_ALERTA_DESTINATARIO
+        EMAIL_ALERTA_SERVIDOR_SMTP   (opcional, padrão Gmail)
+        EMAIL_ALERTA_PORTA_SMTP      (opcional, padrão Gmail)
+
+    Retorna None sem erro nenhum se as três variáveis obrigatórias não
+    estiverem todas presentes (uso normal no PC ou num app hospedado), ou
+    se a porta SMTP informada não for um número válido.
+    """
+    remetente = os.environ.get("EMAIL_ALERTA_REMETENTE")
+    senha_app = os.environ.get("EMAIL_ALERTA_SENHA_APP")
+    destinatario = os.environ.get("EMAIL_ALERTA_DESTINATARIO")
+    if not (remetente and senha_app and destinatario):
+        return None
+
+    config: dict[str, Any] = {
+        "remetente": remetente,
+        "senha_app": senha_app,
+        "destinatario": destinatario,
+    }
+    servidor_smtp = os.environ.get("EMAIL_ALERTA_SERVIDOR_SMTP")
+    if servidor_smtp:
+        config["servidor_smtp"] = servidor_smtp
+    porta_smtp = os.environ.get("EMAIL_ALERTA_PORTA_SMTP")
+    if porta_smtp:
+        try:
+            config["porta_smtp"] = int(porta_smtp)
+        except ValueError:
+            pass  # ignora valor inválido e usa a porta padrão (Gmail)
+    return config
 
 
 def _carregar_config_do_arquivo() -> dict[str, Any] | None:
