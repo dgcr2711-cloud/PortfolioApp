@@ -113,20 +113,27 @@ def _aba_posicoes_e_alocacao(dados: dict, ocultar_valores: bool, posicoes: list[
 
     with col_grafico:
         st.subheader("Alocação")
-        agrupar_por = st.radio("Agrupar por", ["Ativo", "Setor"], horizontal=True, label_visibility="collapsed")
-        posicoes_com_valor = [p for p in posicoes if p["atual"] > 0]
-        if not posicoes_com_valor:
-            st.caption("Sem posições para exibir no gráfico ainda.")
-        elif agrupar_por == "Ativo":
-            fig = _grafico_alocacao([p["ticker"] for p in posicoes_com_valor], [p["atual"] for p in posicoes_com_valor])
-            st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
-        else:
-            por_setor: dict[str, float] = {}
-            for p in posicoes_com_valor:
-                setor = dados["setores"].get(p["ticker"], "Sem setor definido")
-                por_setor[setor] = por_setor.get(setor, 0) + p["atual"]
-            fig = _grafico_alocacao(list(por_setor.keys()), list(por_setor.values()))
-            st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+        # st.container(border=True) em vez de deixar o gráfico solto: a
+        # mesma moldura em cartão da tabela de posições ao lado, pra não
+        # ficar "flutuando" sem contorno nenhum no fundo escuro da página
+        # (2026-09-02, mesma lógica do .card-tabela em ui/styles.py — aqui
+        # é um componente nativo do Streamlit, não HTML manual, então usa o
+        # container nativo com borda em vez da classe CSS).
+        with st.container(border=True):
+            agrupar_por = st.radio("Agrupar por", ["Ativo", "Setor"], horizontal=True, label_visibility="collapsed")
+            posicoes_com_valor = [p for p in posicoes if p["atual"] > 0]
+            if not posicoes_com_valor:
+                st.caption("Sem posições para exibir no gráfico ainda.")
+            elif agrupar_por == "Ativo":
+                fig = _grafico_alocacao([p["ticker"] for p in posicoes_com_valor], [p["atual"] for p in posicoes_com_valor])
+                st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+            else:
+                por_setor: dict[str, float] = {}
+                for p in posicoes_com_valor:
+                    setor = dados["setores"].get(p["ticker"], "Sem setor definido")
+                    por_setor[setor] = por_setor.get(setor, 0) + p["atual"]
+                fig = _grafico_alocacao(list(por_setor.keys()), list(por_setor.values()))
+                st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
 
     with st.expander("⚙️ Definir setor de um ativo"):
         tickers_disponiveis = [p["ticker"] for p in posicoes]
@@ -201,7 +208,7 @@ def _secao_rebalanceamento(dados: dict, ocultar_valores: bool, posicoes: list[di
         )
     colunas = ["Ativo", "Meta", "Atual", "Desvio", "Sugestão", "Status"]
     tabela_html = f"""
-    <div style="overflow-x:auto">
+    <div class="card-tabela">
     <table class="tabela-carteira">
         <thead><tr>{''.join(f'<th>{c}</th>' for c in colunas)}</tr></thead>
         <tbody>{''.join(linhas)}</tbody>
@@ -279,9 +286,25 @@ def _tabela_posicoes_html(lista_ativos: list[dict], ocultar_valores: bool) -> No
                 f'({sinal}{formatar_pct(a["lucro_pct"])})</span>'
             )
 
-        cotacao_html = formatar_moeda_priv(a["cotacao_atual"], False) if a["cotacao_atual"] is not None else '<span class="texto-apagado">—</span>'
-        preco_teto_html = formatar_moeda_priv(a["preco_teto"], False) if a["preco_teto"] else '<span class="texto-apagado">— sem preço teto</span>'
-        margem_html = formatar_moeda_priv(a["preco_teto_com_margem"], False) if a["preco_teto_com_margem"] else '<span class="texto-apagado">— sem preço teto</span>'
+        # Cotação + Variação do Dia viram uma célula só (valor em cima,
+        # variação menor embaixo) — e o mesmo pra Preço Teto + margem de
+        # segurança — 2026-09-02: reduz de 12 pra 10 colunas, pra sofrer
+        # menos com rolagem lateral em notebooks comuns, sem esconder
+        # nenhuma informação (continua tudo visível, só empilhado).
+        variacao_html = badge_variacao_dia(a["variacao_dia_pct"])
+        if a["cotacao_atual"] is not None:
+            cotacao_celula = f'{formatar_moeda_priv(a["cotacao_atual"], False)}<div class="subcelula">{variacao_html}</div>'
+        else:
+            cotacao_celula = '<span class="texto-apagado">—</span>'
+
+        if a["preco_teto"]:
+            margem_texto = formatar_moeda_priv(a["preco_teto_com_margem"], False) if a["preco_teto_com_margem"] else "—"
+            teto_celula = (
+                f'{formatar_moeda_priv(a["preco_teto"], False)}'
+                f'<div class="subcelula">margem 20%: {margem_texto}</div>'
+            )
+        else:
+            teto_celula = '<span class="texto-apagado">— sem preço teto</span>'
 
         motivo_texto = {"sem_preco_teto": "— sem preço teto", "sem_cotacao": "— sem cotação"}.get(a["motivo_sem_indicacao"])
         indicacao_html = badge_indicacao(a["indicacao"], motivo_texto)
@@ -295,14 +318,13 @@ def _tabela_posicoes_html(lista_ativos: list[dict], ocultar_valores: bool) -> No
             margem_pm_html = f'<span style="color:{cor};font-weight:600">{"✅" if positivo else "⚠️"} {sinal}{formatar_pct(a["margem_vs_preco_medio"])}</span>'
 
         alerta_html = badge_alerta(a["preco_alvo"], a["cotacao_atual"], lambda v: formatar_moeda_priv(v, False))
-        variacao_html = badge_variacao_dia(a["variacao_dia_pct"])
 
         linhas.append(
             f'<tr{classe_linha}>'
             f'<td><span class="ticker">{a["ticker"]}{" 🎯" if a["eh_alvo"] else ""}</span>{setor_html}</td>'
-            f'<td>{qtd_html}</td><td>{preco_medio_html}</td><td>{cotacao_html}</td><td>{variacao_html}</td>'
+            f'<td>{qtd_html}</td><td>{preco_medio_html}</td><td>{cotacao_celula}</td>'
             f'<td>{alerta_html}</td>'
-            f'<td>{preco_teto_html}</td><td>{margem_html}</td><td>{indicacao_html}</td><td>{margem_pm_html}</td>'
+            f'<td>{teto_celula}</td><td>{indicacao_html}</td><td>{margem_pm_html}</td>'
             f'<td>{total_atual_html}</td><td>{resultado_html}</td>'
             f'</tr>'
         )
@@ -311,13 +333,16 @@ def _tabela_posicoes_html(lista_ativos: list[dict], ocultar_valores: bool) -> No
     # tabelas largas como esta ficam maiores que a tela em notebooks comuns
     # e as últimas colunas exigem rolar pro lado; como o alerta é algo que
     # você quer bater o olho rapidinho, ele não pode ficar escondido lá no
-    # fim, dependendo de rolagem horizontal pra aparecer.
+    # fim, dependendo de rolagem horizontal pra aparecer. Cotação e Preço
+    # Teto já vêm com a informação relacionada (Variação do Dia / margem de
+    # segurança) empilhada dentro da própria célula — ver comentário acima,
+    # em vez de uma coluna própria pra cada uma.
     colunas = [
-        "Ticker / Setor", "Qtd", "Preço Médio", "Cotação Atual", "Variação Dia", "Alerta", "Preço Teto",
-        "Margem de Segurança (20%)", "Indicação", "Margem vs Preço Médio", "Total Atual", "Resultado",
+        "Ticker / Setor", "Qtd", "Preço Médio", "Cotação Atual", "Alerta", "Preço Teto (margem 20%)",
+        "Indicação", "Margem vs Preço Médio", "Total Atual", "Resultado",
     ]
     tabela_html = f"""
-    <div style="overflow-x:auto">
+    <div class="card-tabela">
     <table class="tabela-carteira">
         <thead><tr>{''.join(f'<th>{c}</th>' for c in colunas)}</tr></thead>
         <tbody>{''.join(linhas)}</tbody>

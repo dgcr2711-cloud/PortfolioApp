@@ -172,7 +172,7 @@ def _tabela_fundamentos_html(lista_ativos: list[dict], fundamentos: dict[str, di
         "Margem Líq.", "Dívida/PL", "Valor de Mercado", "Beta", "Faixa 52 sem.",
     ]
     tabela_html = f"""
-    <div style="overflow-x:auto">
+    <div class="card-tabela">
     <table class="tabela-carteira">
         <thead><tr>{''.join(f'<th>{c}</th>' for c in colunas)}</tr></thead>
         <tbody>{''.join(linhas)}</tbody>
@@ -234,7 +234,7 @@ def _tabela_indicadores_preco_teto_html(lista_ativos: list[dict], fundamentos: d
 
     colunas = ["Ticker", "FCF Livre (12m)", "Dívida Líquida", "Nº de Ações", "Cresc. Receita"]
     tabela_html = f"""
-    <div style="overflow-x:auto">
+    <div class="card-tabela">
     <table class="tabela-carteira">
         <thead><tr>{''.join(f'<th>{c}</th>' for c in colunas)}</tr></thead>
         <tbody>{''.join(linhas)}</tbody>

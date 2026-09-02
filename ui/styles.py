@@ -70,6 +70,19 @@ CSS_GLOBAL = f"""
    pequenas, mais compactas e sem competir em destaque com os KPIs. */
 .linha-badges {{ display: flex; flex-wrap: wrap; gap: 6px; margin: 0.15rem 0 1.15rem 0; }}
 
+/* Moldura que envolve as tabelas HTML "manuais" (Visão Geral / Carteira /
+   Fundamentos) — 2026-09-02: antes elas ficavam soltas direto no fundo
+   escuro da página, sem nenhuma borda, destoando dos cards de KPI e do
+   Painel de Diagnóstico (que sempre tiveram essa moldura). Agora toda
+   tabela grande vive dentro do mesmo "cartão" institucional usado no
+   resto do app. */
+.card-tabela {{
+    background: {COR_FUNDO_CARD}; border: 1px solid #313d4f; border-radius: 0.85rem;
+    padding: 0.35rem 0.85rem; box-shadow: 0 1px 2px rgba(0,0,0,0.25);
+    overflow-x: auto; margin-bottom: 1rem;
+}}
+.card-tabela table {{ margin: 0; }}
+
 /* Tabela "manual" (Visão Geral / Carteira / Fundamentos) para reproduzir
    exatamente o mesmo layout de colunas do dashboard original. */
 table.tabela-carteira {{ width: 100%; border-collapse: collapse; font-size: 13px; }}
@@ -82,6 +95,11 @@ table.tabela-carteira tr:hover {{ background: rgba(255,255,255,0.02); }}
 table.tabela-carteira tr.linha-alvo {{ border-left: 3px solid {COR_INFO}; }}
 table.tabela-carteira .ticker {{ font-weight: 700; color: #ffffff; }}
 table.tabela-carteira .setor {{ font-size: 11px; color: #9ca3af; }}
+/* Segunda linha, menor, dentro de uma célula que junta duas informações
+   relacionadas na mesma coluna (ex: Cotação + Variação do Dia, ou Preço
+   Teto + margem de segurança) — 2026-09-02, reduz o nº de colunas da
+   tabela de Posições pra sofrer menos com rolagem lateral em notebooks. */
+table.tabela-carteira .subcelula {{ font-size: 11px; color: #9ca3af; margin-top: 3px; }}
 
 /* Painel de diagnóstico institucional (Visão Geral) — bloco com destaque
    visual próprio, separado dos cards de KPI comuns. */

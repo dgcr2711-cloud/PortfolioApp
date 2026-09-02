@@ -110,10 +110,12 @@ def render(dados: dict, ocultar_valores: bool) -> None:
         )
 
     tabela_html = f"""
+    <div class="card-tabela">
     <table class="tabela-carteira">
         <thead><tr><th>Ticker</th><th>Tipo</th><th>Cotação</th><th>Alerta</th><th>Preço Teto</th><th>Preço Teto c/ Margem (20%)</th><th>Indicação</th></tr></thead>
         <tbody>{''.join(linhas_html)}</tbody>
     </table>
+    </div>
     """
     st.markdown(tabela_html, unsafe_allow_html=True)
 

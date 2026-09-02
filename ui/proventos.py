@@ -76,21 +76,27 @@ def _render_resumo_por_tipo(proventos: list[dict], ocultar_valores: bool) -> Non
     if not linhas_tipo:
         return
 
-    st.caption(
-        "Por tipo",
-        help=(
-            "Bonificação não entra aqui: é recebida como ações novas (não dinheiro) e já aparece "
-            "como evento societário na aba 🧾 Compras & Vendas."
-        ),
-    )
-    total_geral = sum(l["total"] for l in linhas_tipo)
-    pilulas = []
-    for linha in linhas_tipo:
-        pct = (linha["total"] / total_geral * 100) if total_geral else 0.0
-        valor_texto = formatar_moeda_priv(linha["total"], ocultar_valores)
-        tipo_badge = _CORES_BADGE_TIPO.get(linha["tipo"], "neutral")
-        pilulas.append(badge_html(f"{linha['tipo']} · {formatar_pct(pct)} · {valor_texto}", tipo_badge))
-    st.markdown(f'<div class="linha-badges">{"".join(pilulas)}</div>', unsafe_allow_html=True)
+    # Dentro de um st.container(border=True) — 2026-09-02: antes as pílulas
+    # ficavam soltas direto no fundo da página, e com só 1 tipo registrado
+    # (comum no início) sobrava um vão vazio enorme ao lado, parecendo algo
+    # quebrado/incompleto. Um cartão com borda dá um contorno claro pro
+    # conteúdo, do mesmo jeito que o resto do app, mesmo com 1 pílula só.
+    with st.container(border=True):
+        st.caption(
+            "Por tipo",
+            help=(
+                "Bonificação não entra aqui: é recebida como ações novas (não dinheiro) e já aparece "
+                "como evento societário na aba 🧾 Compras & Vendas."
+            ),
+        )
+        total_geral = sum(l["total"] for l in linhas_tipo)
+        pilulas = []
+        for linha in linhas_tipo:
+            pct = (linha["total"] / total_geral * 100) if total_geral else 0.0
+            valor_texto = formatar_moeda_priv(linha["total"], ocultar_valores)
+            tipo_badge = _CORES_BADGE_TIPO.get(linha["tipo"], "neutral")
+            pilulas.append(badge_html(f"{linha['tipo']} · {formatar_pct(pct)} · {valor_texto}", tipo_badge))
+        st.markdown(f'<div class="linha-badges">{"".join(pilulas)}</div>', unsafe_allow_html=True)
 
 
 def _opacidade_mes_pago(contagem: int) -> float:
@@ -254,8 +260,20 @@ def _render_proximos_dividendos(dados: dict, salvar, ocultar_valores: bool) -> N
     anunciados = dados.get("proventosAnunciadosB3") or {}
     proximos = b3_publico.proximos_a_partir_de(anunciados, hoje=date.today())
     if not proximos:
-        if atualizado_em:
-            st.caption("Nenhum pagamento futuro anunciado pela B3 no momento para os ativos consultados.")
+        # Estado vazio dentro de um cartão com borda (2026-09-02) — antes
+        # era só uma legenda solta embaixo do botão "🔍 Buscar agora", sem
+        # nenhum contorno visual ligando as duas coisas; parecia que a
+        # seção tinha "quebrado" em vez de simplesmente não ter dados
+        # ainda. Mensagem também ficou mais convidativa (indica a ação).
+        with st.container(border=True):
+            if atualizado_em:
+                st.caption("📭 Nenhum pagamento futuro anunciado pela B3 no momento para os ativos consultados.")
+            else:
+                st.caption(
+                    '🔍 Ainda não buscamos os próximos dividendos desta carteira — clique em '
+                    '"Buscar agora" acima (ou espere a próxima 🔄 Atualizar Dados, no máx. 1x por dia) '
+                    "pra ver os pagamentos já anunciados pela B3."
+                )
         return
 
     enriquecidos = calc.enriquecer_proximos_com_total(
