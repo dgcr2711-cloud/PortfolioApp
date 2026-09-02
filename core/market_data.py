@@ -17,6 +17,7 @@ novo, então ele sempre força uma consulta nova ao Yahoo Finance.
 from __future__ import annotations
 
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date, datetime
 from typing import Any
 
@@ -40,7 +41,44 @@ from core.numeros import numero_valido
 # desses casos sem deixar o botão perceptivelmente mais lento.
 _TENTATIVAS_POR_TICKER = 2
 _PAUSA_ENTRE_TENTATIVAS_SEGUNDOS = 0.8
-_PAUSA_ENTRE_TICKERS_SEGUNDOS = 0.25
+
+# 2026-09-03 — diagnóstico de performance a pedido de Diego: buscar um
+# ticker de cada vez (com pausa entre eles) é o principal motivo de
+# "Atualizar Dados" demorar quando a carteira tem várias posições/alvos —
+# cada busca é ESPERA DE REDE (I/O), não conta de CPU, então rodar várias
+# ao mesmo tempo com threads (o GIL do Python não atrapalha aqui, porque a
+# thread fica ociosa esperando resposta, não calculando) reduz o tempo
+# total quase na mesma proporção do número de tickers, sem precisar de
+# infraestrutura nova (fila, Redis etc. — desnecessário numa carteira com
+# poucas dezenas de tickers). O limite de simultâneas abaixo já funciona
+# como um "rate limit" simples contra o Yahoo Finance, evitando disparar
+# tudo de uma vez só.
+_REQUISICOES_SIMULTANEAS = 5
+
+
+def _buscar_em_paralelo(tickers: list[str], funcao_busca) -> dict[str, Any]:
+    """
+    Roda `funcao_busca(ticker)` para cada ticker da lista, em até
+    _REQUISICOES_SIMULTANEAS threads ao mesmo tempo, e devolve um dict
+    {ticker: resultado} só com os que não vieram None. Uma falha (ou
+    exceção) isolada num ticker não derruba os outros — cada
+    `funcao_busca` já trata os próprios erros internamente (ver
+    _buscar_preco_yahoo/_buscar_proximo_dividendo_yahoo).
+    """
+    resultados: dict[str, Any] = {}
+    if not tickers:
+        return resultados
+    with ThreadPoolExecutor(max_workers=min(_REQUISICOES_SIMULTANEAS, len(tickers))) as executor:
+        futuro_por_ticker = {executor.submit(funcao_busca, ticker): ticker for ticker in tickers}
+        for futuro in as_completed(futuro_por_ticker):
+            ticker = futuro_por_ticker[futuro]
+            try:
+                resultado = futuro.result()
+            except Exception:
+                resultado = None
+            if resultado is not None:
+                resultados[ticker] = resultado
+    return resultados
 
 
 def _valor_fast_info(fast_info: Any, *nomes: str) -> float | None:
@@ -179,21 +217,14 @@ def atualizar_cotacoes(tickers: list[str], cotacoes_atuais: dict[str, dict]) -> 
     falharam. Não modifica `cotacoes_atuais` — quem chama decide se salva
     o resultado.
 
-    Uma pequena pausa entre um ticker e outro evita disparar várias
-    requisições em rajada contra o Yahoo Finance — o cenário mais propenso
-    a gerar falhas, e que tende a prejudicar justamente os ÚLTIMOS tickers
-    da lista (normalmente as empresas-alvo, buscadas depois das posições).
+    2026-09-03: as buscas agora rodam em paralelo (ver _buscar_em_paralelo)
+    em vez de uma de cada vez com pausa — era o principal motivo de
+    "Atualizar Dados" demorar com várias posições/alvos na carteira.
     """
+    resultados = _buscar_em_paralelo(tickers, buscar_cotacao_ativo)
     novas_cotacoes = dict(cotacoes_atuais)
-    falhas = []
-    for indice, ticker in enumerate(tickers):
-        if indice > 0:
-            time.sleep(_PAUSA_ENTRE_TICKERS_SEGUNDOS)
-        resultado = buscar_cotacao_ativo(ticker)
-        if resultado is None:
-            falhas.append(ticker)
-        else:
-            novas_cotacoes[ticker] = resultado
+    novas_cotacoes.update(resultados)
+    falhas = [t for t in tickers if t not in resultados]
     return novas_cotacoes, falhas
 
 
@@ -287,17 +318,16 @@ def buscar_proximo_dividendo(ticker: str) -> date | None:
 def buscar_proximos_dividendos(tickers: list[str]) -> list[dict[str, Any]]:
     """
     Busca a data prevista do próximo dividendo/JCP para cada ticker da
-    lista. Só os ativos em que o Yahoo Finance tem esse dado aparecem no
-    resultado — uma lista bem menor que o total de tickers é normal (ver
-    nota no topo desta seção). Ordenado pela data mais próxima primeiro.
+    lista (em paralelo — ver _buscar_em_paralelo, 2026-09-03). Só os
+    ativos em que o Yahoo Finance tem esse dado aparecem no resultado —
+    uma lista bem menor que o total de tickers é normal (ver nota no topo
+    desta seção). Ordenado pela data mais próxima primeiro.
     """
-    encontrados = []
-    for indice, ticker in enumerate(tickers):
-        if indice > 0:
-            time.sleep(_PAUSA_ENTRE_TICKERS_SEGUNDOS)
-        data_prevista = buscar_proximo_dividendo(ticker)
-        if data_prevista is not None:
-            encontrados.append({"ticker": ticker, "data_prevista": data_prevista.isoformat()})
+    datas_por_ticker = _buscar_em_paralelo(tickers, buscar_proximo_dividendo)
+    encontrados = [
+        {"ticker": ticker, "data_prevista": data_prevista.isoformat()}
+        for ticker, data_prevista in datas_por_ticker.items()
+    ]
     encontrados.sort(key=lambda d: d["data_prevista"])
     return encontrados
 

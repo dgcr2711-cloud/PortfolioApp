@@ -311,17 +311,29 @@ def _eventos_por_dia(itens: list[dict], dias_iso: set[str]) -> dict[str, list[di
     provento anunciado, só dentro dos dias úteis mostrados no calendário.
     Um mesmo provento pode gerar até 2 eventos (a Data Com e o Pagamento
     caem em dias diferentes) — cada um com sua própria "cor" na Agenda.
+
+    O valor mostrado em cada evento é sempre dinheiro de verdade, não o
+    valor por ação cru: pra um ativo da carteira COM direito (você já
+    tinha a quantidade que valeu pra esse provento), mostra o TOTAL
+    (valor por ação × sua quantidade) tanto na Data Com quanto no
+    Pagamento — 2026-09-03, a pedido de Diego ("provento que será pago é
+    uma coisa, valor em R$ é o valor do provento x nº de ações": o card
+    tem que mostrar o dinheiro de verdade, não o valor por ação isolado).
+    Só mostra o valor por ação isolado quando não há uma quantidade real
+    por trás dele: ativo de watchlist (você não possui) ou "sem direito"
+    (comprou depois da Data Com — não vale pra esse provento específico).
     """
     eventos: dict[str, list[dict]] = {d: [] for d in dias_iso}
     for item in itens:
         is_watchlist = item["quantidade_hoje"] <= 0
+        por_acao = is_watchlist or item["sem_direito"]
         if item.get("data_com") in dias_iso:
             eventos[item["data_com"]].append({
                 "ticker": item["ticker"], "tipo": item["tipo"], "evento": "data_com",
-                "valor": item["valor_por_acao"], "is_watchlist": is_watchlist, "sem_direito": False,
+                "valor": item["valor_por_acao"] if por_acao else item["total"],
+                "is_watchlist": is_watchlist, "sem_direito": item["sem_direito"],
             })
         if item["data_pagamento"] in dias_iso:
-            por_acao = is_watchlist or item["sem_direito"]
             eventos[item["data_pagamento"]].append({
                 "ticker": item["ticker"], "tipo": item["tipo"], "evento": "pagamento",
                 "valor": item["valor_por_acao"] if por_acao else item["total"],
@@ -339,11 +351,14 @@ def _render_calendario_proventos(itens: list[dict], ocultar_valores: bool) -> No
     no estilo do app "Agenda Dividendos" que Diego mostrou como
     referência (2026-09-02). Dourado = Data Com (é até quando você
     precisava ter comprado pra ter direito) · Verde = Pagamento (dinheiro
-    cai na conta — mostra o TOTAL pra ativos da carteira, valor por ação
-    pra watchlist ou quando "sem direito"). 👀 marca um ativo que você só
-    acompanha, não é posição sua. Só olha os próximos dias úteis por
-    padrão — o resto continua disponível no expander "Ver lista completa"
-    logo abaixo, pra não perder nada que já estava sendo mostrado antes.
+    cai na conta). Em ambos, o valor mostrado é sempre o TOTAL em R$ (valor
+    por ação × sua quantidade) pra ativos da carteira com direito — só
+    aparece o valor por ação isolado quando não há uma quantidade real por
+    trás: watchlist ou "sem direito" (ver docstring de _eventos_por_dia).
+    👀 marca um ativo que você só acompanha, não é posição sua. Só olha os
+    próximos dias úteis por padrão — o resto continua disponível no
+    expander "Ver lista completa" logo abaixo, pra não perder nada que já
+    estava sendo mostrado antes.
 
     Só entram na faixa os dias que já têm algum evento (Data Com ou
     Pagamento) — dia útil sem nada anunciado simplesmente não aparece,

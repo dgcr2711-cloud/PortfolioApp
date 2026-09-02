@@ -1,10 +1,14 @@
 """
-Testes automatizados de core/market_data.py — só a parte de "Próximo
+Testes automatizados de core/market_data.py: a parte de "Próximo
 Dividendo previsto" (normalização de datas do yfinance, extração dos
 campos do calendar/info, e a filtragem/ordenação da lista de próximos
-dividendos) é testada aqui: o resto do módulo (busca de preço/cotação)
-depende inteiramente da rede/Yahoo Finance de verdade e não tem lógica
-pura própria para testar isoladamente.
+dividendos), e a lógica de busca em paralelo por vários tickers
+(_buscar_em_paralelo/atualizar_cotacoes — mesclagem de resultados, lista
+de falhas, isolamento de exceção por ticker). A busca de UM ticker em si
+(_buscar_preco_yahoo, _buscar_nome_empresa etc.) depende inteiramente da
+rede/Yahoo Finance de verdade e não tem lógica pura própria para testar
+isoladamente — por isso os testes acima sempre trocam a função de busca
+de 1 ticker por uma versão falsa antes de chamar a função "várias".
 
 Este módulo importa `streamlit` e `yfinance` no TOPO do arquivo (para usar
 o cache do Streamlit e a biblioteca do Yahoo Finance) — nenhum dos dois
@@ -173,3 +177,56 @@ def test_buscar_proximos_dividendos_ordena_pela_data_mais_proxima():
 
 def test_buscar_proximos_dividendos_lista_vazia_sem_tickers():
     assert market_data.buscar_proximos_dividendos([]) == []
+
+
+# ==========================================================================
+# _buscar_em_paralelo / atualizar_cotacoes — 2026-09-03, otimização de
+# performance: as buscas por ticker passaram a rodar em paralelo (threads)
+# em vez de uma de cada vez com pausa entre elas.
+# ==========================================================================
+
+def test_buscar_em_paralelo_junta_so_os_resultados_nao_none():
+    def busca(ticker):
+        return None if ticker == "VALE3" else f"resultado-{ticker}"
+
+    resultado = market_data._buscar_em_paralelo(["PETR4", "VALE3", "ITUB4"], busca)
+    assert resultado == {"PETR4": "resultado-PETR4", "ITUB4": "resultado-ITUB4"}
+
+
+def test_buscar_em_paralelo_lista_vazia():
+    assert market_data._buscar_em_paralelo([], lambda t: t) == {}
+
+
+def test_buscar_em_paralelo_excecao_isolada_nao_derruba_os_outros():
+    def busca(ticker):
+        if ticker == "VALE3":
+            raise RuntimeError("falha simulada")
+        return f"ok-{ticker}"
+
+    resultado = market_data._buscar_em_paralelo(["PETR4", "VALE3", "ITUB4"], busca)
+    assert resultado == {"PETR4": "ok-PETR4", "ITUB4": "ok-ITUB4"}
+
+
+def test_atualizar_cotacoes_mescla_com_as_existentes_e_lista_falhas():
+    original = market_data.buscar_cotacao_ativo
+    cotacoes_novas = {
+        "PETR4": {"preco": 38.5},
+        "ITUB4": {"preco": 34.2},
+    }
+    market_data.buscar_cotacao_ativo = lambda ticker: cotacoes_novas.get(ticker)
+    try:
+        existentes = {"VALE3": {"preco": 60.0}}  # ticker que não está sendo atualizado agora
+        novas, falhas = market_data.atualizar_cotacoes(["PETR4", "ITUB4", "CMIG4"], existentes)
+        assert novas["PETR4"] == {"preco": 38.5}
+        assert novas["ITUB4"] == {"preco": 34.2}
+        assert novas["VALE3"] == {"preco": 60.0}  # preservado, não fazia parte da busca
+        assert falhas == ["CMIG4"]  # não veio em cotacoes_novas -> buscar_cotacao_ativo devolveu None
+        assert existentes == {"VALE3": {"preco": 60.0}}  # dict original não foi modificado
+    finally:
+        market_data.buscar_cotacao_ativo = original
+
+
+def test_atualizar_cotacoes_lista_vazia():
+    novas, falhas = market_data.atualizar_cotacoes([], {"PETR4": {"preco": 1.0}})
+    assert novas == {"PETR4": {"preco": 1.0}}
+    assert falhas == []
