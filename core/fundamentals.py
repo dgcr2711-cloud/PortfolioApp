@@ -17,6 +17,7 @@ sentido buscá-los com a mesma frequência.
 
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from typing import Any
 
@@ -25,6 +26,48 @@ import yfinance as yf
 
 from core.config import CACHE_TTL_FUNDAMENTOS_SEGUNDOS, SUFIXO_B3
 from core.numeros import numero_valido
+
+# 2026-09-03 — mesmo raciocínio de core.market_data._buscar_em_paralelo:
+# cada busca no Yahoo Finance é espera de rede (I/O), não conta de CPU, e
+# aqui tem duas fontes de lentidão que valem a pena resolver:
+#
+# 1. "🔄 Atualizar Fundamentos" buscava um ticker de cada vez, em vez de em
+#    paralelo (mesmo problema que atualizar_cotacoes tinha).
+# 2. "🔄 Atualizar Análise Avançada" chamava buscar_dados_piotroski() e
+#    logo em seguida buscar_dados_altman() para o MESMO ticker — e cada
+#    uma abria sua própria conexão e buscava as demonstrações ANUAIS de
+#    novo, mesmo as duas precisando quase dos mesmos dados (.financials e
+#    .balance_sheet). Ver _buscar_demonstracoes_anuais() abaixo: agora as
+#    duas funções compartilham uma única busca cacheada por ticker — a
+#    segunda chamada (Piotroski ou Altman, o que rodar depois) vem do
+#    cache, sem nova ida à rede.
+_REQUISICOES_SIMULTANEAS = 5
+
+
+def _buscar_em_paralelo(itens: list[str], funcao_busca) -> dict[str, Any]:
+    """
+    Roda `funcao_busca(item)` para cada item da lista, em até
+    _REQUISICOES_SIMULTANEAS threads ao mesmo tempo, e devolve um dict
+    {item: resultado} só com os que não vieram None. Uma falha (ou
+    exceção) isolada num item não derruba os outros. Mesmo padrão de
+    core.market_data._buscar_em_paralelo (não compartilhado entre os dois
+    módulos de propósito — é só uma dúzia de linhas, e evita acoplar dois
+    módulos que hoje não têm nenhuma outra dependência um do outro).
+    """
+    resultados: dict[str, Any] = {}
+    if not itens:
+        return resultados
+    with ThreadPoolExecutor(max_workers=min(_REQUISICOES_SIMULTANEAS, len(itens))) as executor:
+        futuro_por_item = {executor.submit(funcao_busca, item): item for item in itens}
+        for futuro in as_completed(futuro_por_item):
+            item = futuro_por_item[futuro]
+            try:
+                resultado = futuro.result()
+            except Exception:
+                resultado = None
+            if resultado is not None:
+                resultados[item] = resultado
+    return resultados
 
 
 _LINHAS_LUCRO_LIQUIDO = ("Net Income", "Net Income Common Stockholders", "Net Income Continuous Operations")
@@ -242,22 +285,73 @@ def buscar_fundamentos(ticker: str) -> dict[str, Any] | None:
 
 
 def atualizar_fundamentos(tickers: list[str], fundamentos_atuais: dict[str, dict]) -> tuple[dict[str, dict], list[str]]:
-    """Mesma forma de uso de market_data.atualizar_cotacoes(): busca cada ticker,
-    devolve um dicionário mesclado e a lista de tickers que falharam."""
+    """
+    Mesma forma de uso de market_data.atualizar_cotacoes(): busca cada
+    ticker (em paralelo — ver _buscar_em_paralelo, 2026-09-03) e devolve
+    um dicionário mesclado com o que já existia + a lista de tickers que
+    falharam.
+    """
+    resultados = _buscar_em_paralelo(tickers, buscar_fundamentos)
     novos_fundamentos = dict(fundamentos_atuais)
-    falhas = []
-    for ticker in tickers:
-        resultado = buscar_fundamentos(ticker)
-        if resultado is None:
-            falhas.append(ticker)
-        else:
-            novos_fundamentos[ticker] = resultado
+    novos_fundamentos.update(resultados)
+    falhas = [t for t in tickers if t not in resultados]
     return novos_fundamentos, falhas
 
 
 def limpar_cache_fundamentos() -> None:
     """Força a próxima busca a ignorar o cache de 24h."""
     buscar_fundamentos.clear()
+
+
+@st.cache_data(ttl=CACHE_TTL_FUNDAMENTOS_SEGUNDOS, show_spinner=False)
+def _buscar_demonstracoes_anuais(symbolo_yahoo: str) -> dict[str, Any]:
+    """
+    Busca, numa ÚNICA sessão do yfinance, tudo que o Piotroski F-Score
+    (buscar_dados_piotroski) e o Altman Z-Score (buscar_dados_altman)
+    precisam das demonstrações ANUAIS (.financials, .balance_sheet,
+    .cashflow) + o resumo rápido (.info, só usado pelo Altman).
+
+    2026-09-03 — antes, cada uma dessas duas funções abria sua PRÓPRIA
+    conexão e buscava essas demonstrações de novo, mesmo sendo chamadas
+    uma logo depois da outra para o MESMO ticker (ver
+    ui.acoes_comuns.atualizar_analise_avancada) — .financials e
+    .balance_sheet eram buscados 2x cada, e .info só era usado pelo
+    Altman mas ainda assim numa conexão separada. Com essa busca
+    compartilhada (cacheada por symbolo), a segunda chamada — Piotroski
+    ou Altman, o que rodar por último — vem do cache, sem nova ida à
+    rede: na prática, analisar um ticker passou a custar 1 busca de rede
+    em vez de quase 2.
+
+    Cada campo é buscado com seu próprio try/except: uma demonstração que
+    falhar (ou nem existir para aquele ativo) não derruba as outras —
+    fica None só naquele campo específico. Isso é estritamente mais
+    tolerante do que o comportamento antigo (onde qualquer uma das três
+    falhando descartava as outras duas que tinham funcionado): cada
+    consumidor já sabe lidar com um campo faltando (ver _linha()), então
+    não há motivo pra jogar fora dados que vieram certos.
+    """
+    try:
+        ticker_obj = yf.Ticker(symbolo_yahoo)
+    except Exception:
+        return {"info": None, "financials": None, "balance_sheet": None, "cashflow": None}
+
+    def _tentar(obter):
+        try:
+            return obter()
+        except Exception:
+            return None
+
+    return {
+        "info": _tentar(lambda: ticker_obj.info),
+        "financials": _tentar(lambda: ticker_obj.financials),
+        "balance_sheet": _tentar(lambda: ticker_obj.balance_sheet),
+        "cashflow": _tentar(lambda: ticker_obj.cashflow),
+    }
+
+
+def limpar_cache_demonstracoes_anuais() -> None:
+    """Força a próxima busca (Piotroski ou Altman) a ignorar o cache de 24h."""
+    _buscar_demonstracoes_anuais.clear()
 
 
 @st.cache_data(ttl=CACHE_TTL_FUNDAMENTOS_SEGUNDOS, show_spinner=False)
@@ -285,15 +379,15 @@ def buscar_dados_piotroski(ticker: str) -> dict[str, Any] | None:
     igual ao padrão já usado em _linha() para os outros campos deste
     arquivo, mas vale conferir o resultado na aba Fundamentos antes de
     confiar de olhos fechados na pontuação de uma ação específica.
+
+    2026-09-03: a busca em si agora vem de _buscar_demonstracoes_anuais()
+    (compartilhada com buscar_dados_altman) — ver docstring de lá.
     """
     symbolo = f"{ticker}{SUFIXO_B3}"
-    try:
-        ticker_obj = yf.Ticker(symbolo)
-        financials = ticker_obj.financials
-        balanco = ticker_obj.balance_sheet
-        fluxo_caixa = ticker_obj.cashflow
-    except Exception:
-        return None
+    brutos = _buscar_demonstracoes_anuais(symbolo)
+    financials = brutos["financials"]
+    balanco = brutos["balance_sheet"]
+    fluxo_caixa = brutos["cashflow"]
 
     lucro = _linha(financials, _LINHAS_LUCRO_LIQUIDO)
     ativos = _linha(balanco, _LINHAS_ATIVOS_TOTAIS)
@@ -360,6 +454,7 @@ def buscar_dados_piotroski(ticker: str) -> dict[str, Any] | None:
 def limpar_cache_piotroski() -> None:
     """Força a próxima busca do Piotroski a ignorar o cache de 24h."""
     buscar_dados_piotroski.clear()
+    _buscar_demonstracoes_anuais.clear()  # senão a busca "nova" ainda viria do cache compartilhado
 
 
 @st.cache_data(ttl=CACHE_TTL_FUNDAMENTOS_SEGUNDOS, show_spinner=False)
@@ -378,15 +473,15 @@ def buscar_dados_altman(ticker: str) -> dict[str, Any] | None:
     (core/altman.py) já está 100% coberta por testes com números
     inventados; o que falta confirmar no seu PC é só se os nomes de linha
     abaixo batem com o que o Yahoo Finance devolve para ações da B3.
+
+    2026-09-03: a busca em si agora vem de _buscar_demonstracoes_anuais()
+    (compartilhada com buscar_dados_piotroski) — ver docstring de lá.
     """
     symbolo = f"{ticker}{SUFIXO_B3}"
-    try:
-        ticker_obj = yf.Ticker(symbolo)
-        info = ticker_obj.info
-        financials = ticker_obj.financials
-        balanco = ticker_obj.balance_sheet
-    except Exception:
-        return None
+    brutos = _buscar_demonstracoes_anuais(symbolo)
+    info = brutos["info"]
+    financials = brutos["financials"]
+    balanco = brutos["balance_sheet"]
     if not info or not isinstance(info, dict):
         return None
 
@@ -418,3 +513,56 @@ def buscar_dados_altman(ticker: str) -> dict[str, Any] | None:
 def limpar_cache_altman() -> None:
     """Força a próxima busca do Altman Z-Score a ignorar o cache de 24h."""
     buscar_dados_altman.clear()
+    _buscar_demonstracoes_anuais.clear()  # senão a busca "nova" ainda viria do cache compartilhado
+
+
+def buscar_analise_avancada_varios(tickers: list[str]) -> tuple[dict[str, dict], dict[str, dict]]:
+    """
+    Busca Piotroski + Altman de vários tickers em paralelo (2026-09-03 —
+    ver _buscar_em_paralelo no topo do arquivo). Como as duas funções
+    compartilham o cache de _buscar_demonstracoes_anuais, buscar as duas
+    pro mesmo ticker custa, na prática, só 1 ida à rede (a segunda já vem
+    do cache) — este helper só paraleliza ENTRE tickers diferentes, que é
+    onde ainda sobrava tempo sequencial.
+
+    Devolve (piotroski_por_ticker, altman_por_ticker) — cada um só com os
+    tickers em que aquela busca específica deu certo (um ativo pode ter
+    Piotroski sem ter Altman, ou vice-versa; um não depende do outro).
+    """
+    piotroski_por_ticker: dict[str, dict] = {}
+    altman_por_ticker: dict[str, dict] = {}
+    if not tickers:
+        return piotroski_por_ticker, altman_por_ticker
+
+    def _buscar_os_dois(ticker: str) -> tuple[dict | None, dict | None]:
+        """
+        Busca Piotroski e Altman independentemente um do outro — mesma
+        garantia que o código sequencial antigo já tinha ("um não trava o
+        outro", ver docstring de atualizar_analise_avancada em
+        ui/acoes_comuns.py): as duas funções documentam que nunca lançam
+        exceção (devolvem None em vez disso), mas por segurança uma
+        exceção inesperada numa não impede a outra de ser tentada.
+        """
+        try:
+            dados_piotroski = buscar_dados_piotroski(ticker)
+        except Exception:
+            dados_piotroski = None
+        try:
+            dados_altman = buscar_dados_altman(ticker)
+        except Exception:
+            dados_altman = None
+        return dados_piotroski, dados_altman
+
+    with ThreadPoolExecutor(max_workers=min(_REQUISICOES_SIMULTANEAS, len(tickers))) as executor:
+        futuro_por_ticker = {executor.submit(_buscar_os_dois, ticker): ticker for ticker in tickers}
+        for futuro in as_completed(futuro_por_ticker):
+            ticker = futuro_por_ticker[futuro]
+            try:
+                dados_piotroski, dados_altman = futuro.result()
+            except Exception:
+                continue
+            if dados_piotroski is not None:
+                piotroski_por_ticker[ticker] = dados_piotroski
+            if dados_altman is not None:
+                altman_por_ticker[ticker] = dados_altman
+    return piotroski_por_ticker, altman_por_ticker

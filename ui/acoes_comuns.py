@@ -171,6 +171,11 @@ def atualizar_analise_avancada(dados: dict, salvar) -> None:
     Cada ticker é tratado de forma independente: se o Piotroski não deu
     certo para um ativo mas o Altman deu (ou vice-versa), o que funcionou é
     salvo normalmente — um não trava o outro.
+
+    2026-09-03: a busca de todos os tickers agora roda em paralelo, e
+    Piotroski+Altman do mesmo ticker compartilham a mesma busca de
+    demonstrações anuais nos bastidores — ver
+    core.fundamentals.buscar_analise_avancada_varios().
     """
     posicoes = calc.consolidar_posicoes(dados["compras"], dados["eventos"])
     tickers_posicoes = {p["ticker"] for p in posicoes}
@@ -191,33 +196,35 @@ def atualizar_analise_avancada(dados: dict, salvar) -> None:
     agora = datetime.now().strftime("%d/%m/%Y %H:%M")
 
     with st.spinner(f"Buscando Piotroski F-Score e Altman Z-Score de {len(tickers)} ativo(s) — isso demora um pouco mais que o normal..."):
-        for ticker in tickers:
-            dados_brutos_piotroski = fundamentals.buscar_dados_piotroski(ticker)
-            if dados_brutos_piotroski is not None:
-                resultado = piotroski.calcular_piotroski(dados_brutos_piotroski)
-                dados["piotroski"][ticker] = {
-                    "pontos": resultado.pontos,
-                    "totalAvaliado": resultado.total_avaliado,
-                    "classificacao": resultado.classificacao,
-                    "criterios": [
-                        {"chave": c.chave, "rotulo": c.rotulo, "grupo": c.grupo, "passou": c.passou}
-                        for c in resultado.criterios
-                    ],
-                    "atualizadoEm": agora,
-                }
-            else:
-                falhas_piotroski.append(ticker)
+        piotroski_por_ticker, altman_por_ticker = fundamentals.buscar_analise_avancada_varios(tickers)
 
-            dados_brutos_altman = fundamentals.buscar_dados_altman(ticker)
-            if dados_brutos_altman is not None:
-                resultado_altman = altman.calcular_altman(dados_brutos_altman)
-                dados["altman"][ticker] = {
-                    "zScore": resultado_altman.z_score,
-                    "classificacao": resultado_altman.classificacao,
-                    "atualizadoEm": agora,
-                }
-            else:
-                falhas_altman.append(ticker)
+    for ticker in tickers:
+        dados_brutos_piotroski = piotroski_por_ticker.get(ticker)
+        if dados_brutos_piotroski is not None:
+            resultado = piotroski.calcular_piotroski(dados_brutos_piotroski)
+            dados["piotroski"][ticker] = {
+                "pontos": resultado.pontos,
+                "totalAvaliado": resultado.total_avaliado,
+                "classificacao": resultado.classificacao,
+                "criterios": [
+                    {"chave": c.chave, "rotulo": c.rotulo, "grupo": c.grupo, "passou": c.passou}
+                    for c in resultado.criterios
+                ],
+                "atualizadoEm": agora,
+            }
+        else:
+            falhas_piotroski.append(ticker)
+
+        dados_brutos_altman = altman_por_ticker.get(ticker)
+        if dados_brutos_altman is not None:
+            resultado_altman = altman.calcular_altman(dados_brutos_altman)
+            dados["altman"][ticker] = {
+                "zScore": resultado_altman.z_score,
+                "classificacao": resultado_altman.classificacao,
+                "atualizadoEm": agora,
+            }
+        else:
+            falhas_altman.append(ticker)
 
     salvar(dados)
 
