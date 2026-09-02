@@ -488,6 +488,35 @@ def test_enriquecer_proximos_com_total_lista_vazia():
 
 
 # ==========================================================================
+# quantidade_em_data
+# ==========================================================================
+
+def test_quantidade_em_data_conta_so_compras_ate_a_data():
+    compras = [_compra("BBSE3", "2026-01-10", 100), _compra("BBSE3", "2026-06-01", 50)]
+    assert calc.quantidade_em_data("BBSE3", "2026-03-01", compras, []) == pytest.approx(100.0)
+    assert calc.quantidade_em_data("BBSE3", "2026-06-01", compras, []) == pytest.approx(150.0)
+
+
+def test_quantidade_em_data_zero_para_ticker_nunca_comprado():
+    compras = [_compra("BBSE3", "2026-01-10", 100)]
+    assert calc.quantidade_em_data("PETR4", "2026-06-01", compras, []) == 0.0
+
+
+def test_quantidade_em_data_desconta_venda():
+    compras = [
+        _compra("BBSE3", "2026-01-10", 100),
+        _compra("BBSE3", "2026-04-01", 40, tipo="venda"),
+    ]
+    assert calc.quantidade_em_data("BBSE3", "2026-03-01", compras, []) == pytest.approx(100.0)
+    assert calc.quantidade_em_data("BBSE3", "2026-04-01", compras, []) == pytest.approx(60.0)
+
+
+def test_quantidade_em_data_data_antes_de_qualquer_compra():
+    compras = [_compra("BBSE3", "2026-06-01", 100)]
+    assert calc.quantidade_em_data("BBSE3", "2026-01-01", compras, []) == 0.0
+
+
+# ==========================================================================
 # TWR vs. Ibovespa
 # ==========================================================================
 

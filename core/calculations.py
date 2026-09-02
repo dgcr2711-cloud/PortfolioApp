@@ -408,6 +408,24 @@ def enriquecer_proximos_com_total(
     return resultado
 
 
+def quantidade_em_data(ticker: str, data: str, compras: list[dict], eventos: list[dict]) -> float:
+    """
+    Quantas ações de `ticker` você tinha, reconstruindo o ledger só com
+    compras/vendas/eventos até `data` (ISO "AAAA-MM-DD"), inclusive.
+
+    Usado no registro manual de proventos (aba Proventos): em vez de pedir
+    pra você mesmo multiplicar valor-por-ação × quantidade de ações antes
+    de digitar (motivo real de erro — um provento registrado com o valor
+    por ação em vez do total), o formulário calcula a quantidade sozinho a
+    partir do seu histórico, e só pede o valor por ação. Mesma regra de
+    "quantidade na Data Com" já usada em enriquecer_proximos_com_total.
+    """
+    compras_ate = [c for c in compras if (c.get("data") or "") <= data]
+    eventos_ate = [e for e in eventos if (e.get("data") or "") <= data]
+    ledger = construir_ledger(compras_ate, eventos_ate)
+    return ledger.posicoes.get(ticker, {}).get("qtd", 0.0)
+
+
 def proventos_12m(proventos: list[dict]) -> float:
     """Usado no card 'Proventos (12m)' da Visão Geral."""
     um_ano_atras = date.today() - timedelta(days=365)

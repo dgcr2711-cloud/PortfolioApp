@@ -190,6 +190,29 @@ table.tabela-proximos-proventos td.col-total.sem-direito {{
     background: rgba(255,255,255,0.03); font-size: 0.85rem; color: #9ca3af;
 }}
 .card-proximos-proventos .rodape-total strong {{ color: {COR_POSITIVO}; font-size: 0.95rem; }}
+
+/* "Agenda de Dividendos" (aba Proventos) — vista em calendário semanal,
+   2026-09-02, no estilo do app "Agenda Dividendos" que Diego mostrou como
+   referência: dias úteis lado a lado, um cartãozinho por evento (Data Com
+   ou Pagamento). A pílula do ticker reaproveita as classes .badge-destaque
+   (Data Com — dourado) / .badge-ok (Pagamento — verde) já usadas no resto
+   do app, então nenhuma cor nova entra no tema. */
+.calendario-proventos {{ display: flex; gap: 0.75rem; overflow-x: auto; padding-bottom: 0.35rem; margin-bottom: 0.5rem; }}
+.cal-dia {{
+    flex: 1 1 0; min-width: 160px; background: {COR_FUNDO_CARD}; border: 1px solid #313d4f;
+    border-radius: 0.85rem; overflow: hidden; box-shadow: 0 1px 2px rgba(0,0,0,0.25);
+}}
+.cal-dia.cal-hoje {{ border-color: {COR_INFO}; }}
+.cal-dia .cal-cabecalho {{ padding: 0.6rem 0.75rem 0.4rem; border-bottom: 1px solid #262f3d; }}
+.cal-dia.cal-hoje .cal-cabecalho {{ border-top: 3px solid {COR_INFO}; padding-top: calc(0.6rem - 3px); }}
+.cal-dia .dia-semana {{ font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: #9ca3af; }}
+.cal-dia.cal-hoje .dia-semana {{ color: {COR_INFO}; }}
+.cal-dia .dia-data {{ font-size: 11px; color: #6b7280; margin-top: 0.1rem; }}
+.cal-dia .cal-eventos {{ padding: 0.6rem; display: flex; flex-direction: column; gap: 0.5rem; }}
+.cal-evento {{ background: rgba(255,255,255,0.03); border-radius: 0.6rem; padding: 0.5rem 0.6rem; }}
+.cal-evento .cal-topo {{ display: flex; justify-content: space-between; align-items: center; gap: 0.4rem; }}
+.cal-evento .cal-valor {{ font-size: 12px; font-weight: 700; color: #e5e7eb; white-space: nowrap; }}
+.cal-evento .cal-rotulo {{ font-size: 10.5px; color: #9ca3af; margin-top: 0.35rem; }}
 </style>
 """
 

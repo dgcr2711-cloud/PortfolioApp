@@ -19,7 +19,7 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 
 from core import b3_publico
 from core import calculations as calc
@@ -32,6 +32,8 @@ from ui.styles import badge_html, card_kpi_html, render_cards
 _NOMES_MESES = [
     "Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez",
 ]
+
+_NOMES_DIAS_SEMANA = ["Segunda-feira", "Terça-feira", "Quarta-feira", "Quinta-feira", "Sexta-feira"]
 
 # Cor do badge de cada tipo no resumo "Por tipo" — mesmas classes de
 # ui.styles (badge-ok/info/destaque), só pra dar uma pista visual (verde/
@@ -282,18 +284,126 @@ def _render_proximos_dividendos(dados: dict, salvar, ocultar_valores: bool) -> N
     carteira = [p for p in enriquecidos if p["quantidade_hoje"] > 0]
     watchlist = [p for p in enriquecidos if p["quantidade_hoje"] <= 0]
 
-    if carteira:
-        _render_card_proximos("📈 Carteira", carteira, ocultar_valores, mostrar_total=True)
-        if any(p["sem_direito"] for p in carteira):
-            st.caption('⚠️ "sem direito" = comprado depois da Data Com — não vale pra esse provento específico.')
+    _render_calendario_proventos(enriquecidos, ocultar_valores)
+
+    with st.expander("📜 Ver lista completa (além dos próximos dias úteis)"):
+        if carteira:
+            _render_card_proximos("📈 Carteira", carteira, ocultar_valores, mostrar_total=True)
+            if any(p["sem_direito"] for p in carteira):
+                st.caption('⚠️ "sem direito" = comprado depois da Data Com — não vale pra esse provento específico.')
+        _render_watchlist_proximos(watchlist, ocultar_valores)
+
+
+def _proximos_dias_uteis(hoje: date, quantidade: int) -> list[date]:
+    """Os próximos `quantidade` dias ÚTEIS (seg-sex) a partir de hoje, hoje incluso se for dia útil."""
+    dias: list[date] = []
+    cursor = hoje
+    while len(dias) < quantidade:
+        if cursor.weekday() < 5:
+            dias.append(cursor)
+        cursor += timedelta(days=1)
+    return dias
+
+
+def _eventos_por_dia(itens: list[dict], dias_iso: set[str]) -> dict[str, list[dict]]:
+    """
+    Agrupa por data (ISO) os eventos de Data Com e Pagamento de cada
+    provento anunciado, só dentro dos dias úteis mostrados no calendário.
+    Um mesmo provento pode gerar até 2 eventos (a Data Com e o Pagamento
+    caem em dias diferentes) — cada um com sua própria "cor" na Agenda.
+    """
+    eventos: dict[str, list[dict]] = {d: [] for d in dias_iso}
+    for item in itens:
+        is_watchlist = item["quantidade_hoje"] <= 0
+        if item.get("data_com") in dias_iso:
+            eventos[item["data_com"]].append({
+                "ticker": item["ticker"], "tipo": item["tipo"], "evento": "data_com",
+                "valor": item["valor_por_acao"], "is_watchlist": is_watchlist, "sem_direito": False,
+            })
+        if item["data_pagamento"] in dias_iso:
+            por_acao = is_watchlist or item["sem_direito"]
+            eventos[item["data_pagamento"]].append({
+                "ticker": item["ticker"], "tipo": item["tipo"], "evento": "pagamento",
+                "valor": item["valor_por_acao"] if por_acao else item["total"],
+                "is_watchlist": is_watchlist, "sem_direito": item["sem_direito"],
+            })
+    for lista in eventos.values():
+        lista.sort(key=lambda e: (e["evento"] != "pagamento", e["ticker"]))
+    return eventos
+
+
+def _render_calendario_proventos(itens: list[dict], ocultar_valores: bool) -> None:
+    """
+    "Agenda de Dividendos" — a Data Com e o Pagamento de cada provento
+    anunciado, plotados nos próprios dias úteis em que caem (próximos 5),
+    no estilo do app "Agenda Dividendos" que Diego mostrou como
+    referência (2026-09-02). Dourado = Data Com (é até quando você
+    precisava ter comprado pra ter direito) · Verde = Pagamento (dinheiro
+    cai na conta — mostra o TOTAL pra ativos da carteira, valor por ação
+    pra watchlist ou quando "sem direito"). 👀 marca um ativo que você só
+    acompanha, não é posição sua. Só olha os próximos dias úteis por
+    padrão — o resto continua disponível no expander "Ver lista completa"
+    logo abaixo, pra não perder nada que já estava sendo mostrado antes.
+
+    Só entram na faixa os dias que já têm algum evento (Data Com ou
+    Pagamento) — dia útil sem nada anunciado simplesmente não aparece,
+    em vez de virar um cartão vazio (a pedido de Diego, 2026-09-02).
+    """
+    hoje = date.today()
+    dias = _proximos_dias_uteis(hoje, 5)
+    dias_iso = {d.isoformat() for d in dias}
+    eventos = _eventos_por_dia(itens, dias_iso)
+
+    dias_com_eventos = [d for d in dias if eventos[d.isoformat()]]
+    if not dias_com_eventos:
+        return
+
+    colunas_html = []
+    for d in dias_com_eventos:
+        d_iso = d.isoformat()
+        classe_hoje = " cal-hoje" if d == hoje else ""
+        nome_dia = "Hoje" if d == hoje else _NOMES_DIAS_SEMANA[d.weekday()]
+        cartoes = []
+        for ev in eventos[d_iso]:
+            tipo_badge = "ok" if ev["evento"] == "pagamento" else "destaque"
+            rotulo_evento = "Pagamento" if ev["evento"] == "pagamento" else "Data Com"
+            if ev["sem_direito"]:
+                rotulo_evento += " (sem direito)"
+            marca_watchlist = " 👀" if ev["is_watchlist"] else ""
+            valor_texto = "••••" if ocultar_valores else formatar_moeda(ev["valor"])
+            cartoes.append(
+                f'<div class="cal-evento">'
+                f'<div class="cal-topo">{badge_html(ev["ticker"] + marca_watchlist, tipo_badge)}'
+                f'<span class="cal-valor">{valor_texto}</span></div>'
+                f'<div class="cal-rotulo">{rotulo_evento} · {ev["tipo"]}</div>'
+                f'</div>'
+            )
+        colunas_html.append(
+            f'<div class="cal-dia{classe_hoje}">'
+            f'<div class="cal-cabecalho"><div class="dia-semana">{nome_dia}</div>'
+            f'<div class="dia-data">{d.strftime("%d/%m")}</div></div>'
+            f'<div class="cal-eventos">{"".join(cartoes)}</div>'
+            f'</div>'
+        )
+    st.markdown(f'<div class="calendario-proventos">{"".join(colunas_html)}</div>', unsafe_allow_html=True)
+    st.caption(
+        "🥇 dourado = Data Com (até quando você precisava ter comprado) · 🟢 verde = Pagamento "
+        "(dinheiro cai na conta) · 👀 = ativo da watchlist, não é posição sua."
+    )
+
+
+def _render_watchlist_proximos(watchlist: list[dict], ocultar_valores: bool) -> None:
+    """
+    Chamada de dentro do expander "📜 Ver lista completa" (ver
+    _render_proximos_dividendos) — por isso não abre um expander próprio
+    aqui dentro (o Streamlit não permite expander dentro de expander); um
+    divisor + legenda já bastam pra separar visualmente da lista "Carteira"
+    acima.
+    """
     if watchlist:
-        # Dentro de um expander (fechado por padrão), igual ao Mapa de
-        # Dividendos e ao Histórico — a Watchlist é sobre ativos que você só
-        # ACOMPANHA (não tem), então fica em segundo plano em relação ao
-        # card "Carteira" acima (esse sim aparece sempre aberto, é dinheiro
-        # que você realmente vai receber).
-        with st.expander(f"👀 Watchlist — anunciados pela B3 ({len(watchlist)})"):
-            _render_card_proximos("👀 Watchlist", watchlist, ocultar_valores, mostrar_total=False)
+        st.divider()
+        st.caption(f"👀 Watchlist — anunciados pela B3 ({len(watchlist)})")
+        _render_card_proximos("👀 Watchlist", watchlist, ocultar_valores, mostrar_total=False)
 
 
 def _render_card_proximos(titulo: str, itens: list[dict], ocultar_valores: bool, mostrar_total: bool) -> None:
@@ -358,19 +468,55 @@ def _render_card_proximos(titulo: str, itens: list[dict], ocultar_valores: bool,
 
 
 def _render_form_registrar(dados: dict, salvar) -> None:
-    """Formulário de registro manual — dentro de um expander (ver render()), fechado por padrão."""
+    """
+    Formulário de registro manual — dentro de um expander (ver render()),
+    fechado por padrão.
+
+    2026-09-03 (a pedido de Diego, depois de reportar um provento salvo
+    errado): antes pedia direto o "Valor Total (R$)", exigindo que ele
+    mesmo multiplicasse valor-por-ação × quantidade de ações antes de
+    digitar — fácil de errar, e foi exatamente o que aconteceu. Agora ele
+    digita só o Valor por Ação (o número que aparece no comunicado da
+    empresa/B3) e a quantidade que ele tinha NA DATA do provento é
+    calculada sozinha a partir do histórico de compras/eventos
+    (core.calculations.quantidade_em_data — mesma regra de "quantidade na
+    Data Com" já usada em Próximos Dividendos). O total salvo é sempre a
+    multiplicação automática das duas, mostrado antes de clicar Adicionar.
+    """
     c1, c2, c3, c4 = st.columns(4)
     ticker = c1.text_input("Ticker", placeholder="Ex: PETR4", max_chars=10, key="reg_ticker").strip().upper()
     data = c2.date_input("Data", key="reg_data")
     tipo = c3.selectbox("Tipo", ["Dividendo", "JCP", "Rendimento"], key="reg_tipo")
-    valor = c4.number_input("Valor Total (R$)", min_value=0.0, step=0.01, format="%.2f", key="reg_valor")
+    valor_por_acao = c4.number_input(
+        "Valor por Ação (R$)", min_value=0.0, step=0.0001, format="%.4f", key="reg_valor_acao",
+        help="O valor por ação anunciado pela empresa/B3 — o total é calculado sozinho logo abaixo, não precisa multiplicar nada.",
+    )
+
+    quantidade = calc.quantidade_em_data(ticker, data.isoformat(), dados["compras"], dados["eventos"]) if ticker else 0.0
+    total = valor_por_acao * quantidade
+
+    if not ticker:
+        st.caption("Informe o ticker para calcular o total automaticamente.")
+    elif quantidade <= 0:
+        st.caption(
+            f"⚠️ Você não tinha {ticker} em carteira em {formatar_data_br(data.isoformat())} "
+            "(conferido pelo seu histórico de compras) — confira o ticker ou a data antes de adicionar."
+        )
+    else:
+        st.caption(
+            f"Total a registrar: **{formatar_moeda(total)}** "
+            f"({formatar_numero(quantidade, 0)} ações × {formatar_moeda(valor_por_acao)}/ação)"
+        )
+
     if st.button("Adicionar", type="primary", key="reg_adicionar"):
         if not ticker:
             st.warning("Informe o ticker.")
+        elif quantidade <= 0:
+            st.warning(f"Você não tinha {ticker} em carteira nessa data — confira o ticker/data antes de adicionar.")
         else:
             dados["proventos"].append({
                 "id": data_store.novo_id(), "ticker": ticker, "data": data.isoformat(),
-                "tipo": tipo, "valor": float(valor),
+                "tipo": tipo, "valor": float(total),
             })
             salvar(dados)
             st.rerun()
