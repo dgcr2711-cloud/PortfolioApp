@@ -26,6 +26,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from core.auth import CAMINHO_CONFIG_LOGIN
 from core.cloud_sync import CAMINHO_CHAVE_FIREBASE
 from core.config import PASTA_SEGREDOS
 from core.notificacoes_email import CAMINHO_CONFIG_EMAIL
@@ -52,6 +53,29 @@ def _secao_toml(nome_secao: str, dados: dict) -> str:
     linhas = [f"[{nome_secao}]"]
     for chave, valor in dados.items():
         linhas.append(f"{chave} = {_valor_toml(valor)}")
+    return "\n".join(linhas)
+
+
+def _secao_login_toml(config: dict) -> str:
+    """
+    O login (ver core/auth.py) tem uma estrutura ANINHADA (usuário dentro
+    de credentials.usernames, mais uma seção cookie separada), diferente
+    das outras seções acima (que são só chave = valor soltos) — por isso
+    tem sua própria função em vez de reaproveitar _secao_toml.
+    """
+    linhas: list[str] = []
+    usernames = config.get("credentials", {}).get("usernames", {})
+    for usuario, dados_usuario in usernames.items():
+        linhas.append(f"[login_site.credentials.usernames.{usuario}]")
+        for chave, valor in dados_usuario.items():
+            linhas.append(f"{chave} = {_valor_toml(valor)}")
+        linhas.append("")
+
+    cookie = config.get("cookie", {})
+    linhas.append("[login_site.cookie]")
+    for chave, valor in cookie.items():
+        linhas.append(f"{chave} = {_valor_toml(valor)}")
+
     return "\n".join(linhas)
 
 
@@ -102,6 +126,19 @@ def gerar_texto_secrets() -> str:
     else:
         blocos.append("")
         blocos.append(f"# Nenhuma configuração de WhatsApp encontrada em {CAMINHO_CONFIG_WHATSAPP} (alerta por WhatsApp não configurado ainda)")
+
+    if CAMINHO_CONFIG_LOGIN.exists():
+        try:
+            with open(CAMINHO_CONFIG_LOGIN, "r", encoding="utf-8") as f:
+                config_login = json.load(f)
+            blocos.append("")
+            blocos.append(_secao_login_toml(config_login))
+        except (OSError, json.JSONDecodeError) as erro:
+            blocos.append("")
+            blocos.append(f"# Não consegui ler {CAMINHO_CONFIG_LOGIN}: {erro}")
+    else:
+        blocos.append("")
+        blocos.append(f"# Nenhum login configurado em {CAMINHO_CONFIG_LOGIN} (site ainda abre sem senha — rode 'Configurar Login do Site.bat' se quiser proteger)")
 
     return "\n".join(blocos) + "\n"
 

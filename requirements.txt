@@ -12,3 +12,9 @@ openpyxl>=3.1
 # dashboard hospedado quebrou com "ModuleNotFoundError: No module named
 # 'firebase_admin'" ao tentar sincronizar com o Firestore.
 firebase-admin>=6.5
+# streamlit-authenticator: tela de login (e-mail/senha) que protege o
+# dashboard hospedado (core/auth.py) — sem senha, hoje o link do site fica
+# protegido só por ser "secreto". Precisa estar aqui (não em
+# requirements-dev.txt) pelo mesmo motivo do firebase-admin acima: o
+# Streamlit Community Cloud só instala o que está neste arquivo.
+streamlit-authenticator>=0.4

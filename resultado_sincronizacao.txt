@@ -1,0 +1,31 @@
+Sincronizando PC com GitHub 
+ 
+--- git pull (juntando as duas historias) --- 
+warning: in the working copy of 'diagnostico_envio.txt', LF will be replaced by CRLF the next time Git touches it
+Merge made by the 'ort' strategy.
+ .github/workflows/{verificar_alertas_2.yml => verificar_alertas.yml} | 0
+ 1 file changed, 0 insertions(+), 0 deletions(-)
+ rename .github/workflows/{verificar_alertas_2.yml => verificar_alertas.yml} (100%)
+ 
+--- git push (enviando tudo pro GitHub) --- 
+To https://github.com/dgcr2711-cloud/PortfolioApp.git
+   3fff6f6..2a9f558  main -> main
+ 
+--- git status final --- 
+On branch main
+Your branch is up to date with 'origin/main'.
+
+Changes not staged for commit:
+  (use "git add <file>..." to update what will be committed)
+  (use "git restore <file>..." to discard changes in working directory)
+	modified:   diagnostico_envio.txt
+
+Untracked files:
+  (use "git add <file>..." to include in what will be committed)
+	diagnostico_divergencia.txt
+	resultado_sincronizacao.txt
+
+no changes added to commit (use "git add" and/or "git commit -a")
+ 
+Fim. Se aqui em cima aparecer "Your branch is up to date with origin/main" 
+e o push nao mostrou erro, deu tudo certo. 

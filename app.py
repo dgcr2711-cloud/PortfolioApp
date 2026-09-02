@@ -23,7 +23,7 @@ from __future__ import annotations
 
 import streamlit as st
 
-from core import cloud_sync
+from core import auth, cloud_sync
 from core.data_store import carregar_dados, esta_no_modo_demo, salvar_dados
 from ui import (
     carteira,
@@ -41,6 +41,15 @@ from ui.acoes_comuns import atualizar_dados, exibir_status_cotacoes
 from ui.styles import desativar_traducao_automatica, injetar_css
 
 st.set_page_config(page_title="Meu Portfólio B3", page_icon="📊", layout="wide")
+
+# Login (2026-09-04): trava a tela até entrar com usuário/senha, SE houver
+# configuração de login nos Secrets da nuvem (ver core/auth.py). Fica logo
+# no início, antes de qualquer dado ser carregado/desenhado. O link de
+# demonstração (app_demo.py, carteira fictícia) fica de fora de propósito —
+# ele é feito pra ser aberto por qualquer pessoa, sem senha.
+if not esta_no_modo_demo():
+    auth.exigir_login()
+
 injetar_css()
 desativar_traducao_automatica()
 
@@ -144,6 +153,10 @@ with st.sidebar:
 
     st.divider()
     st.caption("💡 Dica: os dados ficam salvos automaticamente a cada alteração, em data/portfolio_data.json.")
+
+    # Só aparece de verdade quando o login estiver configurado E ativo
+    # (site hospedado com Secrets de login) — no PC local, não faz nada.
+    auth.mostrar_botao_sair()
 
 
 if aba_ativa == "🏠 Visão Geral":

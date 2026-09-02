@@ -24,5 +24,9 @@ call venv\Scripts\activate.bat
 
 python gerar_secrets_streamlit.py
 
+REM Abre o resultado sozinho no Bloco de Notas (2026-09-04) - antes disso
+REM era preciso ir procurar o arquivo manualmente, o que confundia.
+start "" notepad "%USERPROFILE%\.portfolio_b3_secrets\secrets_streamlit_gerado.txt"
+
 echo.
 pause

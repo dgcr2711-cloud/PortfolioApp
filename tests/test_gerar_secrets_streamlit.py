@@ -46,40 +46,98 @@ def test_secao_toml_monta_cabecalho_e_uma_linha_por_chave():
     assert "porta_smtp = 465" in linhas
 
 
+def test_secao_login_toml_monta_usuario_aninhado_e_secao_cookie():
+    config = {
+        "credentials": {
+            "usernames": {
+                "diego": {
+                    "email": "diego@exemplo.com",
+                    "first_name": "Diego",
+                    "last_name": "",
+                    "password": "$2b$12$hashfalso",
+                    "roles": ["admin"],
+                    "failed_login_attempts": 0,
+                    "logged_in": False,
+                }
+            }
+        },
+        "cookie": {"name": "portfolio_b3_auth", "key": "chavefalsa123", "expiry_days": 30},
+    }
+    resultado = gerador._secao_login_toml(config)
+    linhas = resultado.splitlines()
+
+    assert "[login_site.credentials.usernames.diego]" in linhas
+    assert 'email = "diego@exemplo.com"' in linhas
+    assert 'password = "$2b$12$hashfalso"' in linhas
+    assert 'roles = ["admin"]' in linhas
+    assert "failed_login_attempts = 0" in linhas
+    assert "logged_in = false" in linhas  # bool Python -> minúsculo em TOML/JSON
+
+    assert "[login_site.cookie]" in linhas
+    assert 'name = "portfolio_b3_auth"' in linhas
+    assert 'key = "chavefalsa123"' in linhas
+    assert "expiry_days = 30" in linhas
+
+
+def test_secao_login_toml_varios_usuarios_cada_um_com_seu_proprio_cabecalho():
+    config = {
+        "credentials": {
+            "usernames": {
+                "diego": {"email": "diego@exemplo.com", "password": "hash1"},
+                "convidado": {"email": "convidado@exemplo.com", "password": "hash2"},
+            }
+        },
+        "cookie": {"name": "portfolio_b3_auth", "key": "chavefalsa", "expiry_days": 30},
+    }
+    resultado = gerador._secao_login_toml(config)
+    assert "[login_site.credentials.usernames.diego]" in resultado
+    assert "[login_site.credentials.usernames.convidado]" in resultado
+
+
 def _com_caminhos_isolados(
-    testar, conteudo_firebase: dict | None, conteudo_email: dict | None, conteudo_whatsapp: dict | None = None,
+    testar,
+    conteudo_firebase: dict | None,
+    conteudo_email: dict | None,
+    conteudo_whatsapp: dict | None = None,
+    conteudo_login: dict | None = None,
 ):
     """
-    Redireciona gerador.CAMINHO_CHAVE_FIREBASE, gerador.CAMINHO_CONFIG_EMAIL
-    e gerador.CAMINHO_CONFIG_WHATSAPP pra arquivos temporários (criando-os
-    só se o conteúdo correspondente não for None) durante a chamada de
-    `testar`, e sempre restaura os valores originais — mesmo se `testar`
-    lançar.
+    Redireciona gerador.CAMINHO_CHAVE_FIREBASE, gerador.CAMINHO_CONFIG_EMAIL,
+    gerador.CAMINHO_CONFIG_WHATSAPP e gerador.CAMINHO_CONFIG_LOGIN pra
+    arquivos temporários (criando-os só se o conteúdo correspondente não for
+    None) durante a chamada de `testar`, e sempre restaura os valores
+    originais — mesmo se `testar` lançar.
     """
     chave_original = gerador.CAMINHO_CHAVE_FIREBASE
     email_original = gerador.CAMINHO_CONFIG_EMAIL
     whatsapp_original = gerador.CAMINHO_CONFIG_WHATSAPP
+    login_original = gerador.CAMINHO_CONFIG_LOGIN
     with tempfile.TemporaryDirectory() as pasta_tmp:
         pasta = Path(pasta_tmp)
         caminho_chave = pasta / "firebase-service-account.json"
         caminho_email = pasta / "email_alertas.json"
         caminho_whatsapp = pasta / "whatsapp_alertas.json"
+        caminho_login = pasta / "login_site.json"
         if conteudo_firebase is not None:
             caminho_chave.write_text(json.dumps(conteudo_firebase), encoding="utf-8")
         if conteudo_email is not None:
             caminho_email.write_text(json.dumps(conteudo_email), encoding="utf-8")
         if conteudo_whatsapp is not None:
             caminho_whatsapp.write_text(json.dumps(conteudo_whatsapp), encoding="utf-8")
+        if conteudo_login is not None:
+            caminho_login.write_text(json.dumps(conteudo_login), encoding="utf-8")
 
         gerador.CAMINHO_CHAVE_FIREBASE = caminho_chave
         gerador.CAMINHO_CONFIG_EMAIL = caminho_email
         gerador.CAMINHO_CONFIG_WHATSAPP = caminho_whatsapp
+        gerador.CAMINHO_CONFIG_LOGIN = caminho_login
         try:
             testar()
         finally:
             gerador.CAMINHO_CHAVE_FIREBASE = chave_original
             gerador.CAMINHO_CONFIG_EMAIL = email_original
             gerador.CAMINHO_CONFIG_WHATSAPP = whatsapp_original
+            gerador.CAMINHO_CONFIG_LOGIN = login_original
 
 
 def test_gerar_texto_secrets_sem_nenhum_arquivo_configurado_avisa_e_nao_quebra():
@@ -88,11 +146,41 @@ def test_gerar_texto_secrets_sem_nenhum_arquivo_configurado_avisa_e_nao_quebra()
         assert "[firebase_service_account]" not in texto
         assert "[email_alertas]" not in texto
         assert "[whatsapp_alertas]" not in texto
+        assert "[login_site" not in texto
         assert "Nenhuma chave do Firebase encontrada" in texto
         assert "Nenhuma configuração de e-mail encontrada" in texto
         assert "Nenhuma configuração de WhatsApp encontrada" in texto
+        assert "Nenhum login configurado" in texto
 
-    _com_caminhos_isolados(testar, conteudo_firebase=None, conteudo_email=None, conteudo_whatsapp=None)
+    _com_caminhos_isolados(testar, conteudo_firebase=None, conteudo_email=None, conteudo_whatsapp=None, conteudo_login=None)
+
+
+def test_gerar_texto_secrets_com_login_inclui_secao_login_site():
+    login_falso = {
+        "credentials": {
+            "usernames": {
+                "diego": {
+                    "email": "diego@exemplo.com",
+                    "first_name": "Diego",
+                    "last_name": "",
+                    "password": "$2b$12$hashfalso",
+                    "roles": ["admin"],
+                    "failed_login_attempts": 0,
+                    "logged_in": False,
+                }
+            }
+        },
+        "cookie": {"name": "portfolio_b3_auth", "key": "chavefalsa", "expiry_days": 30},
+    }
+
+    def testar():
+        texto = gerador.gerar_texto_secrets()
+        assert "[login_site.credentials.usernames.diego]" in texto
+        assert 'password = "$2b$12$hashfalso"' in texto
+        assert "[login_site.cookie]" in texto
+        assert "Nenhum login configurado" not in texto
+
+    _com_caminhos_isolados(testar, conteudo_firebase=None, conteudo_email=None, conteudo_whatsapp=None, conteudo_login=login_falso)
 
 
 def test_gerar_texto_secrets_com_todos_os_arquivos_monta_as_tres_secoes():

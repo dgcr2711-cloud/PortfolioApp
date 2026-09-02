@@ -17,3 +17,24 @@ Untracked files:
 nothing added to commit but untracked files present (use "git add" to track)
  
 --- git add -A --- 
+warning: in the working copy of 'diagnostico_envio.txt', LF will be replaced by CRLF the next time Git touches it
+ 
+--- git diff --cached --stat (o que vai ser enviado agora) --- 
+ diagnostico_envio.txt | 19 +++++++++++++++++++
+ 1 file changed, 19 insertions(+)
+ 
+--- git commit --- 
+[main 7eef1cf] Atualizacao automatica (diagnostico manual)
+ 1 file changed, 19 insertions(+)
+ create mode 100644 diagnostico_envio.txt
+ 
+--- git push --- 
+To https://github.com/dgcr2711-cloud/PortfolioApp.git
+ ! [rejected]        main -> main (non-fast-forward)
+error: failed to push some refs to 'https://github.com/dgcr2711-cloud/PortfolioApp.git'
+hint: Updates were rejected because the tip of your current branch is behind
+hint: its remote counterpart. If you want to integrate the remote changes,
+hint: use 'git pull' before pushing again.
+hint: See the 'Note about fast-forwards' in 'git push --help' for details.
+ 
+Fim do diagnostico. 

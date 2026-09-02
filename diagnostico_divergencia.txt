@@ -1,0 +1,43 @@
+Diagnostico da divergencia entre PC e GitHub 
+ 
+--- git fetch (so baixa informacao, nao muda nada aqui) --- 
+ 
+--- Historico recente (PC = main, GitHub = origin/main) --- 
+* 7eef1cf Atualizacao automatica (diagnostico manual)
+* 8f3995a Atualizacao automatica (envio agendado do Windows)
+* e8427b4 Atualizacao automatica (envio agendado do Windows)
+* cdee14f Atualizacao automatica (envio agendado do Windows)
+* 332329d Atualizacao automatica (envio agendado do Windows)
+* e08a747 Atualizacao automatica (envio agendado do Windows)
+* 5a37587 Atualizacao automatica (envio agendado do Windows)
+| * 3fff6f6 Rename verificar_alertas_2.yml to verificar_alertas.yml
+|/  
+* 9478351 Alertas de preço por WhatsApp
+* 3823142 Alertas em segundo plano
+* bb2b2b2 adiciona ponto de entrada pro app de demonstração
+* e153c3d adiciona modo demonstração
+* 845f182 protege dados reais contra nuvem vazia
+* c8a62cf corrige firebase-admin faltando no deploy
+* e336bfc Corrige travamento no Streamlit Cloud + Secrets
+* 15f39d9 Initial commit
+ 
+--- O que o GitHub tem que seu PC ainda nao recebeu --- 
+commit 3fff6f6ed693c78010c83ad7a9af1f76a7670152
+Author: dgcr2711-cloud <dgcr2711@gmail.com>
+Date:   Sun Aug 30 22:27:15 2026 -0300
+
+    Rename verificar_alertas_2.yml to verificar_alertas.yml
+
+ .github/workflows/{verificar_alertas_2.yml => verificar_alertas.yml} | 0
+ 1 file changed, 0 insertions(+), 0 deletions(-)
+ 
+--- O que seu PC tem que o GitHub ainda nao recebeu (so os titulos) --- 
+7eef1cf Atualizacao automatica (diagnostico manual)
+8f3995a Atualizacao automatica (envio agendado do Windows)
+e8427b4 Atualizacao automatica (envio agendado do Windows)
+cdee14f Atualizacao automatica (envio agendado do Windows)
+332329d Atualizacao automatica (envio agendado do Windows)
+e08a747 Atualizacao automatica (envio agendado do Windows)
+5a37587 Atualizacao automatica (envio agendado do Windows)
+ 
+Fim do diagnostico. Nada foi alterado no projeto. 

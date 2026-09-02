@@ -78,6 +78,12 @@ if errorlevel 1 (
     pip install -r requirements.txt
 )
 
+pip show streamlit-authenticator >nul 2>nul
+if errorlevel 1 (
+    echo Instalando biblioteca de login do site ^(streamlit-authenticator^)...
+    pip install -r requirements.txt
+)
+
 echo.
 echo ============================================================
 echo   Preparando o app do celular...
