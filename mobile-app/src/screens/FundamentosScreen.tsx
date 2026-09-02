@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { ActivityIndicator, FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { usePortfolioSnapshot } from '../hooks/usePortfolioSnapshot';
+import { useEspacoTopo } from '../hooks/useEspacoTopo';
 import { cores, espacamento } from '../theme';
 import { formatarMoeda, formatarNumero, formatarPct } from '../format';
 import type { Ativo, FundamentosAtivo } from '../types';
@@ -16,6 +17,7 @@ import type { Ativo, FundamentosAtivo } from '../types';
  */
 export function FundamentosScreen() {
   const { snapshot, carregando, erro } = usePortfolioSnapshot();
+  const espacoTopo = useEspacoTopo();
 
   if (carregando) {
     return (
@@ -45,7 +47,7 @@ export function FundamentosScreen() {
   return (
     <FlatList
       style={estilos.container}
-      contentContainerStyle={estilos.lista}
+      contentContainerStyle={[estilos.lista, { paddingTop: espacoTopo }]}
       data={snapshot.ativos}
       keyExtractor={(item) => item.ticker}
       ListHeaderComponent={
@@ -163,7 +165,7 @@ function AnaliseAvancada({ ativo }: { ativo: Ativo }) {
       {ativo.piotroski && (
         <View style={estilos.subBlocoAvancado}>
           <Text style={estilos.subtituloCartao}>🧾 Piotroski F-Score</Text>
-          <Text style={estilos.valorDestaqueAvancado}>
+          <Text style={[estilos.valorDestaqueAvancado, { color: corClassificacaoPiotroski(ativo.piotroski.classificacao) }]}>
             {ativo.piotroski.pontos}/{ativo.piotroski.totalAvaliado} — {ativo.piotroski.classificacao}
           </Text>
           {ativo.piotroski.criterios.map((c) => (
@@ -177,7 +179,7 @@ function AnaliseAvancada({ ativo }: { ativo: Ativo }) {
       {ativo.altman && (
         <View style={estilos.subBlocoAvancado}>
           <Text style={estilos.subtituloCartao}>⚠️ Altman Z-Score</Text>
-          <Text style={estilos.valorDestaqueAvancado}>
+          <Text style={[estilos.valorDestaqueAvancado, { color: corClassificacaoAltman(ativo.altman.classificacao) }]}>
             {ativo.altman.zScore !== null ? ativo.altman.zScore.toFixed(2) : '—'} — {ativo.altman.classificacao}
           </Text>
           {ativo.setor === 'Bancos' && (
@@ -205,6 +207,23 @@ function AnaliseAvancada({ ativo }: { ativo: Ativo }) {
       )}
     </View>
   );
+}
+
+// Mesmo mapeamento classificação → cor do app do PC (ui/fundamentos.py) —
+// antes disto, os dois mostravam a classificação em branco/neutro, sem
+// nenhuma pista visual rápida de "isso é bom ou ruim".
+function corClassificacaoPiotroski(classificacao: string): string {
+  if (classificacao === 'Forte') return cores.positivo;
+  if (classificacao === 'Fraca') return cores.negativo;
+  if (classificacao === 'Neutra') return cores.neutro;
+  return cores.neutro;
+}
+
+function corClassificacaoAltman(classificacao: string): string {
+  if (classificacao === 'Zona Segura') return cores.positivo;
+  if (classificacao === 'Zona de Alerta') return cores.destaque;
+  if (classificacao === 'Zona de Risco') return cores.negativo;
+  return cores.neutro;
 }
 
 function formatarValorGrande(valor: number | null): string {
@@ -242,7 +261,7 @@ const estilos = StyleSheet.create({
   container: { flex: 1, backgroundColor: cores.fundoApp },
   centralizado: { flex: 1, backgroundColor: cores.fundoApp, alignItems: 'center', justifyContent: 'center', padding: espacamento.xl },
   textoErro: { color: cores.textoSecundario, textAlign: 'center', fontSize: 14 },
-  lista: { paddingHorizontal: espacamento.lg, paddingTop: espacamento.xl, paddingBottom: espacamento.xl },
+  lista: { paddingHorizontal: espacamento.lg, paddingBottom: espacamento.xl },
   titulo: { color: cores.texto, fontSize: 26, fontWeight: '700' },
   legenda: { color: cores.textoApagado, fontSize: 12, marginTop: 2, marginBottom: espacamento.lg, lineHeight: 17 },
   subtitulo: { color: cores.destaque, fontSize: 12, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.6, marginTop: espacamento.lg, marginBottom: espacamento.sm },

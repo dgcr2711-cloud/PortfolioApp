@@ -28,6 +28,7 @@ import streamlit as st
 from core import calculations as calc
 from core import imposto_renda as ir
 from core.formatting import formatar_data_br, formatar_moeda, formatar_moeda_priv, formatar_numero
+from ui.styles import card_kpi_html, render_cards
 
 
 def render(dados: dict, ocultar_valores: bool) -> None:
@@ -42,13 +43,23 @@ def render(dados: dict, ocultar_valores: bool) -> None:
         "antes de pagar um DARF ou entregar a declaração anual."
     )
 
-    _estudo()
-    st.divider()
-    _resumo_mensal_interativo(dados, ocultar_valores)
-    st.divider()
-    _bens_e_direitos(dados, ocultar_valores)
-    st.divider()
-    _proventos_do_ano(dados, ocultar_valores)
+    # Duas abas (2026-09-02): antes disso a tela inteira era uma coluna só,
+    # misturando o material de estudo (genérico, raramente muda) com os
+    # dados calculados de verdade da sua carteira (o que você realmente
+    # visita de novo, mês a mês) — obrigando a rolar por umas 300 linhas
+    # de conteúdo sempre que só queria ver o resumo do mês. Separado agora
+    # em "o que é cada regra" vs "o que isso significa nos MEUS números".
+    aba_guia, aba_dados = st.tabs(["📖 Guia do IR", "📊 Meus Dados"])
+
+    with aba_guia:
+        _estudo()
+
+    with aba_dados:
+        _resumo_mensal_interativo(dados, ocultar_valores)
+        st.divider()
+        _bens_e_direitos(dados, ocultar_valores)
+        st.divider()
+        _proventos_do_ano(dados, ocultar_valores)
 
 
 # ==========================================================================
@@ -56,7 +67,7 @@ def render(dados: dict, ocultar_valores: bool) -> None:
 # ==========================================================================
 
 def _estudo() -> None:
-    st.subheader("📖 O estudo: como funciona o IR em ações")
+    st.caption("Como funciona o IR em ações — toque em cada tópico para abrir.")
 
     with st.expander("🔎 Visão geral — as duas modalidades"):
         st.markdown(
@@ -222,9 +233,10 @@ def _resumo_mensal_interativo(dados: dict, ocultar_valores: bool) -> None:
 
     with st.expander("Ver saldo de prejuízo acumulado (compensação futura)"):
         ultimo = resumo[-1]
-        c1, c2 = st.columns(2)
-        c1.metric("Prejuízo acumulado — Swing Trade", formatar_moeda(ultimo["swing"]["prejuizo_acumulado_restante"]))
-        c2.metric("Prejuízo acumulado — Day Trade", formatar_moeda(ultimo["day_trade"]["prejuizo_acumulado_restante"]))
+        render_cards([
+            card_kpi_html("Prejuízo acumulado — Swing Trade", formatar_moeda(ultimo["swing"]["prejuizo_acumulado_restante"])),
+            card_kpi_html("Prejuízo acumulado — Day Trade", formatar_moeda(ultimo["day_trade"]["prejuizo_acumulado_restante"])),
+        ])
         st.caption("Esse saldo (se houver) fica disponível para abater lucro futuro da mesma modalidade, sem prazo de validade.")
 
 
@@ -254,7 +266,12 @@ def _bens_e_direitos(dados: dict, ocultar_valores: bool) -> None:
     st.dataframe(pd.DataFrame(linhas), use_container_width=True, hide_index=True)
 
     total = sum(p["valor_total_investido"] for p in posicoes)
-    st.metric(f"Total em {formatar_data_br(data_corte.isoformat())} (custo de aquisição)", formatar_moeda_priv(total, ocultar_valores))
+    render_cards([
+        card_kpi_html(
+            f"Total em {formatar_data_br(data_corte.isoformat())} (custo de aquisição)",
+            formatar_moeda_priv(total, ocultar_valores),
+        )
+    ])
 
 
 # ==========================================================================
@@ -278,10 +295,11 @@ def _proventos_do_ano(dados: dict, ocultar_valores: bool) -> None:
     ano = st.selectbox("Ano", anos)
     resumo = ir.resumo_anual_proventos(proventos, ano)
 
-    c1, c2, c3 = st.columns(3)
-    c1.metric("Dividendos (isentos até R$50k/mês por empresa)", formatar_moeda_priv(resumo["dividendos"], ocultar_valores))
-    c2.metric("JCP (tributação exclusiva, 15%)", formatar_moeda_priv(resumo["jcp"], ocultar_valores))
-    c3.metric("Rendimentos de FII (isentos)", formatar_moeda_priv(resumo["rendimentos_fii"], ocultar_valores))
+    render_cards([
+        card_kpi_html("Dividendos (isentos até R$50k/mês por empresa)", formatar_moeda_priv(resumo["dividendos"], ocultar_valores)),
+        card_kpi_html("JCP (tributação exclusiva, 15%)", formatar_moeda_priv(resumo["jcp"], ocultar_valores)),
+        card_kpi_html("Rendimentos de FII (isentos)", formatar_moeda_priv(resumo["rendimentos_fii"], ocultar_valores)),
+    ])
 
     if resumo["jcp"] > 0:
         st.caption(f"IRRF estimado sobre o JCP recebido em {ano} (15%, já retido na fonte): {formatar_moeda(resumo['jcp_irrf_estimado'])}")

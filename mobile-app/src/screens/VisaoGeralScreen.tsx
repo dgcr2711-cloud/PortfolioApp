@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { ActivityIndicator, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { usePortfolioSnapshot } from '../hooks/usePortfolioSnapshot';
+import { useEspacoTopo } from '../hooks/useEspacoTopo';
 import { CardKpi } from '../components/CardKpi';
 import { GraficoAlocacao } from '../components/GraficoAlocacao';
 import { SegmentedControl } from '../components/SegmentedControl';
@@ -22,6 +23,7 @@ export function VisaoGeralScreen() {
   const { snapshot, carregando, erro } = usePortfolioSnapshot();
   const { ocultarValores } = useOcultarValores();
   const [agruparPor, setAgruparPor] = useState<'ativo' | 'setor'>('ativo');
+  const espacoTopo = useEspacoTopo();
 
   if (carregando) {
     return (
@@ -56,7 +58,7 @@ export function VisaoGeralScreen() {
   return (
     <ScrollView
       style={estilos.container}
-      contentContainerStyle={estilos.conteudo}
+      contentContainerStyle={[estilos.conteudo, { paddingTop: espacoTopo }]}
       refreshControl={<RefreshControl refreshing={false} onRefresh={() => {}} tintColor={cores.destaque} />}
     >
       <View style={estilos.linhaTitulo}>
@@ -68,7 +70,12 @@ export function VisaoGeralScreen() {
       </View>
 
       <View style={estilos.grade}>
-        <CardKpi rotulo="Patrimônio Atual" valor={formatarMoedaPriv(totais.totalAtual, ocultarValores)} />
+        <CardKpi
+          rotulo="Patrimônio Atual"
+          valor={formatarMoedaPriv(totais.totalAtual, ocultarValores)}
+          corValor={cores.destaque}
+          destaque
+        />
         <CardKpi
           rotulo="Resultado"
           valor={`${sinal}${formatarMoedaPriv(totais.lucro, ocultarValores)}`}
@@ -159,7 +166,7 @@ function LinhaDiagnostico({ rotulo, valor, cor = cores.texto }: { rotulo: string
 
 const estilos = StyleSheet.create({
   container: { flex: 1, backgroundColor: cores.fundoApp },
-  conteudo: { padding: espacamento.lg, paddingTop: espacamento.xl },
+  conteudo: { padding: espacamento.lg },
   centralizado: { flex: 1, backgroundColor: cores.fundoApp, alignItems: 'center', justifyContent: 'center', padding: espacamento.xl },
   textoErro: { color: cores.textoSecundario, textAlign: 'center', fontSize: 14, lineHeight: 20 },
   linhaTitulo: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: espacamento.lg },

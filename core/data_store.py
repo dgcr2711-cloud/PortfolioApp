@@ -74,6 +74,21 @@ def estrutura_padrao() -> dict[str, Any]:
         # poder notificar de novo numa próxima queda, sem reenviar e-mail
         # repetido a cada "Atualizar Dados" enquanto o preço não se mexe.
         "alertasEnviados": {},
+        # Proventos anunciados oficialmente pela B3 (core/b3_publico.py):
+        # ticker -> lista de {tipo, valor_por_acao, data_pagamento, ...}.
+        # Buscado automaticamente dentro de "🔄 Atualizar Dados" (no máximo
+        # 1x por dia — ver INTERVALO_ATUALIZACAO_PROVENTOS_B3_SEGUNDOS) e
+        # também sob demanda pelo botão dedicado na aba Proventos. Fica
+        # salvo aqui (não só na sessão) pra sobreviver a fechar e reabrir o
+        # app, e pra alimentar o Mapa de Dividendos e "Próximos Dividendos"
+        # sem precisar buscar de novo toda vez que a tela abre.
+        "proventosAnunciadosB3": {},
+        "proventosAnunciadosB3AtualizadoEm": None,  # ISO datetime da última busca BEM-SUCEDIDA
+        # Se True (padrão), o app roda "🔄 Atualizar Dados" sozinho, uma vez,
+        # assim que é aberto (pasta ou link) — sem precisar clicar no botão.
+        # Ajustável na aba Configurações, pra quem preferir abrir mais rápido
+        # e atualizar manualmente quando quiser.
+        "atualizarAutomaticamenteAoAbrir": True,
         "exportadoEm": None,
     }
 

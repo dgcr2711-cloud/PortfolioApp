@@ -2,6 +2,7 @@ import React from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { NavigationContainer, DarkTheme } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { Text, View } from 'react-native';
 import { VisaoGeralScreen } from './src/screens/VisaoGeralScreen';
 import { CarteiraScreen } from './src/screens/CarteiraScreen';
@@ -96,12 +97,21 @@ function ConteudoComTravaPin() {
 
 export default function App() {
   return (
-    <PinProvider>
-      <AuthProvider>
-        <OcultarValoresProvider>
-          <ConteudoComTravaPin />
-        </OcultarValoresProvider>
-      </AuthProvider>
-    </PinProvider>
+    // SafeAreaProvider precisa envolver tudo (2026-09-02): é ele quem dá a
+    // altura real da área segura do topo/fundo de CADA aparelho (notch,
+    // Dynamic Island, barra de status) pros hooks useSafeAreaInsets()
+    // (ver src/hooks/useEspacoTopo.ts) e também pra própria barra de abas
+    // do react-navigation, que passa a respeitar sozinha a área de baixo
+    // (ex: a "risquinho" de gesto do iPhone) sem precisar de nenhum código
+    // extra aqui.
+    <SafeAreaProvider>
+      <PinProvider>
+        <AuthProvider>
+          <OcultarValoresProvider>
+            <ConteudoComTravaPin />
+          </OcultarValoresProvider>
+        </AuthProvider>
+      </PinProvider>
+    </SafeAreaProvider>
   );
 }

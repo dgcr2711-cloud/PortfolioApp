@@ -166,3 +166,27 @@ elif aba_ativa == "📓 Diário de Tese":
     tese_investimento.render(dados, ocultar_valores, salvar_estado)
 elif aba_ativa == "⚙️ Configurações":
     configuracoes.render(dados, salvar_estado)
+
+# Atualização automática ao abrir (pedido de Diego, 2026-08-31, otimizada
+# em 2026-08-31 pra não travar mais a tela toda): roda "🔄 Atualizar
+# Dados" sozinha uma única vez por sessão do navegador — vale tanto
+# abrindo pela pasta (Iniciar App.bat) quanto por um link salvo, porque as
+# duas formas resultam numa aba nova do navegador, que é exatamente o que
+# dispara uma sessão nova aqui. A trava por session_state garante que isso
+# acontece só nessa primeira vez: cliques depois (trocar de aba, registrar
+# uma compra etc.) causam reruns do script mas não disparam a busca de
+# novo. Desligável na aba Configurações (dados["atualizarAutomaticamenteAoAbrir"])
+# para quem preferir o app abrindo mais rápido, sem essa busca automática.
+#
+# Fica de propósito DEPOIS de toda a barra lateral e do conteúdo da aba
+# ativa (que já foram desenhados acima, usando os últimos dados salvos em
+# disco — instantâneo, sem rede): assim a tela aparece na hora com o que
+# já tinha, e só depois a busca roda por trás, com um aviso pequeno lá na
+# barra lateral (reaberta abaixo) — em vez da tela inteira ficar em branco
+# esperando "Buscando cotações..." antes de mostrar qualquer coisa, como
+# acontecia antes.
+if dados.get("atualizarAutomaticamenteAoAbrir", True) and not st.session_state.get("atualizacao_automatica_feita"):
+    st.session_state["atualizacao_automatica_feita"] = True
+    with st.sidebar:
+        atualizar_dados(dados, salvar_estado)
+    st.rerun()

@@ -95,6 +95,14 @@ LIMITE_ISENCAO_IR_MENSAL = TABELA_IR_ACOES[-1]["limite_isencao_mensal"]  # Venda
 
 WATCHLIST_PADRAO = ["ITUB4", "ALOS3", "ITSA4", "KLBN4"]
 
+# Data em que você começou de fato a ter ações (antes disso a carteira não
+# existia) — usado só pelo "Mapa de Dividendos" (aba Proventos) pra
+# ignorar qualquer provento anterior a essa data, seja registrado por
+# você ou anunciado automaticamente pela B3: um pagamento de antes de
+# você ter aquele ativo não é um padrão seu, só ruído no mapa. Se um dia
+# isso mudar (ex: reconstruir o histórico bem antes), é só atualizar aqui.
+DATA_INICIO_CARTEIRA = "2026-03-01"
+
 SETORES_PADRAO = [
     "Bancos", "Petróleo e Gás", "Mineração e Siderurgia", "Varejo",
     "Energia Elétrica/Saneamento", "Saúde", "Tecnologia", "Papel e Celulose",
@@ -129,6 +137,15 @@ TICKER_IBOVESPA = "^BVSP"
 CACHE_TTL_COTACAO_SEGUNDOS = 5 * 60      # 5 minutos
 CACHE_TTL_NOME_EMPRESA_SEGUNDOS = 24 * 60 * 60  # 24h (nome da empresa não muda)
 CACHE_TTL_FUNDAMENTOS_SEGUNDOS = 24 * 60 * 60   # 24h — P/L, ROE etc. não mudam intradia
+CACHE_TTL_DIVIDENDOS_SEGUNDOS = 24 * 60 * 60    # 24h — data prevista de dividendo não muda intradia
+
+# De quanto em quanto tempo, no MÁXIMO, a busca automática de proventos
+# anunciados pela B3 (core/b3_publico.py) roda de novo sozinha dentro do
+# "🔄 Atualizar Dados" — evita bater no site da B3 a cada clique (comum
+# várias vezes ao dia), já que um novo dividendo anunciado é um evento raro
+# (semanas, não minutos). O botão dedicado "Buscar Próximos Dividendos" na
+# aba Proventos ignora esse intervalo e sempre busca na hora.
+INTERVALO_ATUALIZACAO_PROVENTOS_B3_SEGUNDOS = 24 * 60 * 60
 
 # ----------------------------------------------------------------------
 # Análise de carteira (concentração, diversificação)

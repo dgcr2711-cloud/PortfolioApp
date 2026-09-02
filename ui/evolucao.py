@@ -14,6 +14,7 @@ import streamlit as st
 from core import calculations as calc
 from core import risco
 from core.formatting import formatar_data_br, formatar_pct
+from ui.styles import card_kpi_html, render_cards
 
 
 def render(dados: dict, salvar) -> None:
@@ -54,27 +55,28 @@ def render(dados: dict, salvar) -> None:
         "'dinheiro novo colocado'. O Ibovespa usa retorno simples do período."
     )
     comparativo = calc.twr_vs_ibovespa(historico)
-    c1, c2 = st.columns(2)
     if comparativo:
         cor_cart = "#34d399" if comparativo["rent_carteira_pct"] >= 0 else "#fb7185"
         cor_ibov = "#34d399" if comparativo["rent_ibov_pct"] >= 0 else "#fb7185"
-        c1.markdown(
-            f'<span style="font-size:12px;color:#9ca3af">SUA CARTEIRA NO PERÍODO (TWR APROX.)</span><br>'
-            f'<span style="font-size:1.5rem;font-weight:700;color:{cor_cart}">{formatar_pct(comparativo["rent_carteira_pct"])}</span>',
-            unsafe_allow_html=True,
-        )
-        c2.markdown(
-            f'<span style="font-size:12px;color:#9ca3af">IBOVESPA NO MESMO PERÍODO</span><br>'
-            f'<span style="font-size:1.5rem;font-weight:700;color:{cor_ibov}">{formatar_pct(comparativo["rent_ibov_pct"])}</span>',
-            unsafe_allow_html=True,
-        )
+        render_cards([
+            card_kpi_html(
+                "Sua carteira no período (TWR aprox.)",
+                formatar_pct(comparativo["rent_carteira_pct"]), cor_valor=cor_cart,
+            ),
+            card_kpi_html(
+                "Ibovespa no mesmo período",
+                formatar_pct(comparativo["rent_ibov_pct"]), cor_valor=cor_ibov,
+            ),
+        ])
         st.caption(
             f"Período: {formatar_data_br(comparativo['data_inicio'])} até {formatar_data_br(comparativo['data_fim'])}. "
             "Metodologia: retorno da carteira encadeado por sub-período (aproximação de TWR); Ibovespa em retorno simples."
         )
     else:
-        c1.markdown("—")
-        c2.markdown("—")
+        render_cards([
+            card_kpi_html("Sua carteira no período (TWR aprox.)", "—"),
+            card_kpi_html("Ibovespa no mesmo período", "—"),
+        ])
         st.caption("Atualize as cotações em ao menos 2 dias diferentes para ver este comparativo (o Ibovespa é buscado junto com suas cotações).")
 
     _secao_risco(dados, salvar)
@@ -103,17 +105,16 @@ def _secao_risco(dados: dict, salvar) -> None:
         st.info(resultado.aviso)
         return
 
-    c1, c2 = st.columns(2)
-    if resultado.beta is not None:
-        c1.metric("Beta (vs. Ibovespa)", f"{resultado.beta:.2f}")
-    else:
-        c1.metric("Beta (vs. Ibovespa)", "—")
-        st.caption("Ibovespa não variou no período coberto pelos snapshots — não dá para calcular.")
-    if resultado.sharpe_anualizado is not None:
-        c2.metric("Índice de Sharpe (anualizado)", f"{resultado.sharpe_anualizado:.2f}")
-    else:
-        c2.metric("Índice de Sharpe (anualizado)", "—")
-        st.caption("Carteira sem nenhuma variação de retorno entre os períodos — não dá para calcular.")
+    valor_beta = f"{resultado.beta:.2f}" if resultado.beta is not None else "—"
+    valor_sharpe = f"{resultado.sharpe_anualizado:.2f}" if resultado.sharpe_anualizado is not None else "—"
+    render_cards([
+        card_kpi_html("Beta (vs. Ibovespa)", valor_beta),
+        card_kpi_html("Índice de Sharpe (anualizado)", valor_sharpe),
+    ])
+    if resultado.beta is None:
+        st.caption("Beta: Ibovespa não variou no período coberto pelos snapshots — não dá para calcular.")
+    if resultado.sharpe_anualizado is None:
+        st.caption("Sharpe: carteira sem nenhuma variação de retorno entre os períodos — não dá para calcular.")
 
     with st.expander("O que isso significa?"):
         st.markdown(

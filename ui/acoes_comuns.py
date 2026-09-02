@@ -13,8 +13,9 @@ from datetime import datetime
 
 import streamlit as st
 
-from core import altman, calculations as calc, piotroski
+from core import altman, b3_publico, calculations as calc, piotroski
 from core import cloud_sync, fundamentals, market_data, notificacoes_whatsapp, setores
+from core.config import INTERVALO_ATUALIZACAO_PROVENTOS_B3_SEGUNDOS
 from core.mobile_snapshot import montar_snapshot_para_celular
 from core.pendencias_celular import (
     aplicar_calculos_teto_do_celular,
@@ -107,6 +108,12 @@ def atualizar_dados(dados: dict, salvar) -> None:
     else:
         st.session_state["status_cotacoes"] = f"Dados atualizados às {agora} — Yahoo Finance (yfinance)." + sufixo_celular
         st.session_state["status_cotacoes_falhou"] = False
+
+    # Proventos anunciados pela B3 (aba Proventos → Mapa de Dividendos e
+    # Próximos Dividendos) — automático, mas autolimitado a 1x/dia (ver
+    # atualizar_proventos_b3) pra não deixar "Atualizar Dados" mais lento
+    # a cada clique.
+    atualizar_proventos_b3(dados, salvar)
 
 
 def atualizar_dados_fundamentalistas(dados: dict, salvar) -> None:
@@ -223,6 +230,69 @@ def atualizar_analise_avancada(dados: dict, salvar) -> None:
         partes.append(f"Sem Altman para: {', '.join(falhas_altman)}.")
     st.session_state["status_analise_avancada"] = " ".join(partes)
     st.session_state["status_analise_avancada_falhou"] = bool(falhas_piotroski or falhas_altman)
+
+
+def atualizar_proventos_b3(dados: dict, salvar, forcar: bool = False) -> None:
+    """
+    Busca, direto no site oficial da B3 (core/b3_publico.py), os
+    dividendos/JCP/rendimentos já anunciados pelas empresas da carteira +
+    watchlist. Usada de dois jeitos:
+
+    - Automaticamente dentro de atualizar_dados() ("🔄 Atualizar Dados"),
+      com `forcar=False`: só busca de verdade se já se passou
+      INTERVALO_ATUALIZACAO_PROVENTOS_B3_SEGUNDOS desde a última vez que
+      funcionou (ver b3_publico.precisa_atualizar) — evita bater no site
+      da B3 a cada clique, já que um novo provento anunciado é raro.
+    - Sob demanda pelo botão dedicado na aba Proventos, com `forcar=True`:
+      ignora esse intervalo e busca na hora, sempre.
+
+    Falha (sem_conexao) NÃO apaga o que já estava salvo em
+    dados["proventosAnunciadosB3"] nem atualiza o timestamp — o Mapa de
+    Dividendos continua mostrando o último resultado que funcionou, e a
+    próxima tentativa automática já acontece no PRÓXIMO "Atualizar Dados"
+    (não espera o intervalo cheio de novo depois de uma falha).
+    """
+    agora = datetime.now()
+    if not forcar and not b3_publico.precisa_atualizar(
+        dados.get("proventosAnunciadosB3AtualizadoEm"), agora, INTERVALO_ATUALIZACAO_PROVENTOS_B3_SEGUNDOS
+    ):
+        return
+
+    posicoes = calc.consolidar_posicoes(dados["compras"], dados["eventos"])
+    tickers_posicoes = {p["ticker"] for p in posicoes}
+    tickers_alvo = [t for t in dados["watchlist"] if t not in tickers_posicoes]
+    tickers = [p["ticker"] for p in posicoes] + tickers_alvo
+    if not tickers:
+        return
+
+    with st.spinner(f"Buscando proventos anunciados pela B3 para {len(tickers)} ativo(s)..."):
+        anunciados, sem_conexao = b3_publico.buscar_proventos_anunciados_varios(tickers)
+
+    if sem_conexao:
+        st.session_state["status_proventos_b3"] = (
+            "Não consegui acessar o site da B3 agora (pode ser bloqueio temporário do site ou falta "
+            "de internet). O Mapa de Dividendos automático continua mostrando o resultado da última "
+            "busca que funcionou — vou tentar de novo automaticamente na próxima vez que você clicar "
+            "em \"🔄 Atualizar Dados\"."
+        )
+        st.session_state["status_proventos_b3_falhou"] = True
+        return
+
+    dados["proventosAnunciadosB3"] = anunciados
+    dados["proventosAnunciadosB3AtualizadoEm"] = agora.isoformat()
+    salvar(dados)
+    st.session_state["status_proventos_b3"] = f"Proventos anunciados pela B3 atualizados às {agora.strftime('%H:%M:%S')}."
+    st.session_state["status_proventos_b3_falhou"] = False
+
+
+def exibir_status_proventos_b3() -> None:
+    """Equivalente a exibir_status_cotacoes(), para a busca automática de proventos anunciados pela B3."""
+    if "status_proventos_b3" not in st.session_state:
+        return
+    if st.session_state.get("status_proventos_b3_falhou"):
+        st.warning(st.session_state["status_proventos_b3"])
+    else:
+        st.caption(st.session_state["status_proventos_b3"])
 
 
 def exibir_status_analise_avancada() -> None:

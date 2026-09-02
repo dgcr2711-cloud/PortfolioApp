@@ -82,6 +82,21 @@ def test_gerar_csv_posicoes_contem_cabecalho_e_dados():
     assert len(linhas) == 4  # cabeçalho + 3 ativos
 
 
+def test_gerar_csv_proventos_contem_cabecalho_e_dados():
+    csv_texto = exportacao.gerar_csv_proventos(DADOS_EXEMPLO)
+    linhas = csv_texto.strip().splitlines()
+    assert "Ticker" in linhas[0]
+    assert "Tipo" in linhas[0]
+    assert len(linhas) == 3  # cabeçalho + 2 proventos
+
+
+def test_gerar_csv_proventos_vazio_so_tem_cabecalho():
+    dados_sem_proventos = {**DADOS_EXEMPLO, "proventos": []}
+    csv_texto = exportacao.gerar_csv_proventos(dados_sem_proventos)
+    linhas = csv_texto.strip().splitlines()
+    assert len(linhas) == 1
+
+
 def test_gerar_excel_carteira_produz_arquivo_valido_com_4_abas():
     xlsx_bytes = exportacao.gerar_excel_carteira(DADOS_EXEMPLO)
     assert len(xlsx_bytes) > 1000

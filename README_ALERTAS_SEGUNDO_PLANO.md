@@ -72,8 +72,14 @@ continua funcionando normalmente, independente disso).
    | Name (nome do Secret) | Secret (valor a colar) |
    |---|---|
    | `FIREBASE_SERVICE_ACCOUNT_JSON` | todo o conteúdo do arquivo `firebase-service-account.json` |
-   | `WHATSAPP_ALERTA_NUMERO` | o seu número de WhatsApp, com código do país (ex: `+5511999999999`) |
+   | `WHATSAPP_ALERTA_NUMERO` | o seu número de WhatsApp, com código do país, **SEM o "9" extra** (ex: `+553197001985`, não `+5531997001985` — ver aviso abaixo) |
    | `WHATSAPP_ALERTA_APIKEY` | a apikey que o CallMeBot te mandou no Passo 1 |
+
+   ⚠️ **Atenção com o número**: o CallMeBot confirma "enviado" mesmo quando o
+   número está errado — só se percebe que está errado porque a mensagem
+   nunca chega de verdade no WhatsApp. Descoberto na prática: use o número
+   com **8 dígitos** depois do DDD, sem o "9" extra que os celulares
+   brasileiros ganharam (ex: `+553197001985`, não `+5531997001985`).
 
 Ao final, a tela deve mostrar 3 Secrets cadastrados. Você não consegue
 mais ver o conteúdo deles depois de salvos (só apagar e recadastrar, se

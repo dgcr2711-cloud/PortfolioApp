@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { ActivityIndicator, FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { usePortfolioSnapshot } from '../hooks/usePortfolioSnapshot';
+import { useEspacoTopo } from '../hooks/useEspacoTopo';
 import { Badge, BadgeIndicacao } from '../components/Badge';
 import { BotaoOcultarValores } from '../components/BotaoOcultarValores';
 import { useOcultarValores } from '../contexts/OcultarValoresContext';
@@ -20,6 +21,7 @@ import type { Ativo, Rebalanceamento } from '../types';
 export function CarteiraScreen() {
   const { snapshot, carregando, erro } = usePortfolioSnapshot();
   const [expandidos, setExpandidos] = useState<Set<string>>(new Set());
+  const espacoTopo = useEspacoTopo();
 
   function alternar(ticker: string) {
     setExpandidos((atual) => {
@@ -50,7 +52,7 @@ export function CarteiraScreen() {
   }
 
   return (
-    <View style={estilos.container}>
+    <View style={[estilos.container, { paddingTop: espacoTopo }]}>
       <View style={estilos.linhaTitulo}>
         <Text style={estilos.titulo}>Carteira</Text>
         <View style={estilos.acoesTopo}>
@@ -198,7 +200,7 @@ function Campo({ rotulo, valor, cor = cores.texto }: { rotulo: string; valor: st
 }
 
 const estilos = StyleSheet.create({
-  container: { flex: 1, backgroundColor: cores.fundoApp, paddingTop: espacamento.xl },
+  container: { flex: 1, backgroundColor: cores.fundoApp },
   centralizado: { flex: 1, backgroundColor: cores.fundoApp, alignItems: 'center', justifyContent: 'center', padding: espacamento.xl },
   textoErro: { color: cores.textoSecundario, textAlign: 'center', fontSize: 14 },
   linhaTitulo: {

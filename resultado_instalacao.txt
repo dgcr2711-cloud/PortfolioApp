@@ -1,0 +1,18 @@
+============================================================
+  Instalando o Envio Automatico para o GitHub
+============================================================
+Rodado em: 01/09/2026 22:22:05,88
+
+PRONTO! Envio automatico instalado com sucesso.
+
+A partir de agora, a cada 20 minutos o seu computador vai checar
+sozinho se ha alguma atualizacao pendente do PortfolioApp e enviar
+para o GitHub automaticamente - sem voce precisar abrir o GitHub
+Desktop nem clicar em Commit/Push nunca mais.
+
+Isso vale tanto para as atualizacoes que eu (Claude) te enviar de
+agora em diante quanto para qualquer alteracao que ja esteja no seu
+computador aguardando envio.
+
+Se um dia quiser desligar isso, use o arquivo
+"Desativar Envio Automatico.bat".

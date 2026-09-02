@@ -244,6 +244,170 @@ def resumo_proventos(proventos: list[dict], total_investido_atual: float) -> dic
     return {"total_geral": total_geral, "total_12m": total_12m, "yield_on_cost": yoc}
 
 
+def resumo_proventos_por_tipo(proventos: list[dict]) -> list[dict[str, Any]]:
+    """
+    Total recebido (histórico) e quantidade de pagamentos, agrupado por Tipo
+    (Dividendo/JCP/Rendimento — os tipos hoje aceitos no formulário da aba
+    Proventos). Usado no painel "Por tipo" da aba Proventos, pra dar uma
+    visão rápida de quanto veio de cada fonte.
+
+    Bonificação NÃO aparece aqui de propósito: ela é registrada como um
+    evento societário (aba Compras & Vendas), não como um provento em
+    dinheiro — é recebimento de ações novas, não de caixa, então misturar
+    os dois numa mesma soma em R$ não faria sentido.
+
+    Ordenado do maior total pro menor. Lista vazia se não houver proventos.
+    """
+    totais: dict[str, dict[str, float]] = {}
+    for p in proventos:
+        tipo = p.get("tipo") or "Outro"
+        entrada = totais.setdefault(tipo, {"total": 0.0, "quantidade": 0})
+        entrada["total"] += p["valor"]
+        entrada["quantidade"] += 1
+    linhas = [{"tipo": tipo, "total": v["total"], "quantidade": v["quantidade"]} for tipo, v in totais.items()]
+    linhas.sort(key=lambda l: l["total"], reverse=True)
+    return linhas
+
+
+def mapa_dividendos_por_ticker(proventos: list[dict], data_minima: str | None = None) -> list[dict[str, Any]]:
+    """
+    Para cada ticker com proventos registrados, em quais meses do ano (1 a
+    12) ele historicamente pagou e o valor médio recebido por pagamento —
+    baseado SÓ no que já está registrado na aba Proventos deste app.
+
+    Isto é uma estimativa a partir do seu próprio histórico, não uma
+    garantia de pagamento futuro nem um dado vindo de fonte externa — a
+    empresa pode mudar (ou parar) sua política de dividendos a qualquer
+    momento, e quanto menos pagamentos você tiver registrado para um
+    ticker, menos confiável o padrão de meses fica (um único pagamento em
+    março não quer dizer que a empresa só paga em março). Quanto mais
+    proventos forem registrados ao longo do tempo, mais completo este mapa
+    fica sozinho.
+
+    `data_minima` (opcional, formato "AAAA-MM-DD"): ignora qualquer
+    provento anterior a essa data. Existe porque um pagamento de antes de
+    você sequer ter aquele ativo em carteira não representa um padrão seu
+    — no app de Diego isso é fixado em core.config.DATA_INICIO_CARTEIRA
+    (ele só passou a ter ações a partir de março/2026).
+
+    Cada item: {"ticker", "meses" (lista ordenada, 1=Jan..12=Dez),
+    "contagem_por_mes" (dict {mês: quantas vezes pagou nesse mês} — usado
+    pro "mapa de calor" da UI: quanto mais vezes, mais forte o destaque),
+    "valor_medio_por_pagamento", "quantidade_pagamentos"}. Proventos sem
+    data válida, ou anteriores a `data_minima`, são ignorados. Ordenado
+    por ticker.
+    """
+    por_ticker: dict[str, dict[str, Any]] = {}
+    for p in proventos:
+        data_str = p.get("data")
+        if not data_str:
+            continue
+        if data_minima and data_str[:10] < data_minima:
+            continue
+        try:
+            mes = date.fromisoformat(data_str[:10]).month
+        except ValueError:
+            continue
+        ticker = p["ticker"]
+        entrada = por_ticker.setdefault(ticker, {"contagem_por_mes": {}, "total": 0.0, "quantidade": 0})
+        entrada["contagem_por_mes"][mes] = entrada["contagem_por_mes"].get(mes, 0) + 1
+        entrada["total"] += p["valor"]
+        entrada["quantidade"] += 1
+
+    resultado = [
+        {
+            "ticker": ticker,
+            "meses": sorted(v["contagem_por_mes"]),
+            "contagem_por_mes": v["contagem_por_mes"],
+            "valor_medio_por_pagamento": v["total"] / v["quantidade"],
+            "quantidade_pagamentos": v["quantidade"],
+        }
+        for ticker, v in por_ticker.items()
+    ]
+    resultado.sort(key=lambda r: r["ticker"])
+    return resultado
+
+
+def fluxo_mensal_estimado_dividendos(proventos: list[dict], data_minima: str | None = None) -> list[float]:
+    """
+    Estimativa de quanto você tende a receber em cada mês do ano (Janeiro a
+    Dezembro), somando — para cada ticker — o valor médio por pagamento nos
+    meses em que ele historicamente pagou (ver mapa_dividendos_por_ticker,
+    inclusive a ressalva de que isto vem só do seu próprio histórico e o
+    que `data_minima` faz).
+
+    Devolve uma lista de 12 números (índice 0 = Janeiro ... 11 = Dezembro).
+    Um ticker que paga todo mês soma seu valor médio nos 12 meses; um que só
+    apareceu 1x em março soma seu valor só em março (mesmo sendo uma
+    amostra pequena — por isso a UI deve deixar claro que isto é estimativa).
+    """
+    fluxo = [0.0] * 12
+    for item in mapa_dividendos_por_ticker(proventos, data_minima=data_minima):
+        for mes in item["meses"]:
+            fluxo[mes - 1] += item["valor_medio_por_pagamento"]
+    return fluxo
+
+
+def enriquecer_proximos_com_total(
+    proximos: list[dict], compras: list[dict], eventos: list[dict], hoje: str
+) -> list[dict[str, Any]]:
+    """
+    Para cada item de "próximos dividendos anunciados" (ver
+    core.b3_publico.proximos_a_partir_de — tem "ticker", "valor_por_acao"
+    e "data_com"), calcula quanto R$ você deve receber DE VERDADE.
+
+    O pulo do gato é a "Data Com" (o último dia em que era preciso ESTAR
+    com o ativo em carteira pra ter direito àquele provento específico —
+    quem compra depois dela não recebe, mesmo que o pagamento em si só
+    aconteça semanas ou meses depois):
+
+    - Se a Data Com já passou (<= `hoje`): usa a quantidade que você
+      TINHA exatamente até aquele dia (reconstruindo o ledger só com
+      compras/eventos até essa data — ver construir_ledger). Um ativo
+      comprado DEPOIS da Data Com de um provento já anunciado entra aqui
+      com quantidade 0 pra ESSE provento específico, mesmo que você já
+      possua o ativo hoje — é exatamente o caso "comprei CPFE3 depois, não
+      vou receber esse provento" que motivou isso existir.
+    - Se a Data Com ainda não chegou (> `hoje`) ou não veio informada: usa
+      a quantidade que você tem HOJE, como melhor estimativa possível (o
+      quanto você vai ter até lá ainda pode mudar).
+
+    Devolve uma cópia de cada item (o original não é modificado) com:
+    "quantidade" (a que valeu pro cálculo, pelas regras acima), "total"
+    (valor_por_acao * quantidade), "quantidade_hoje" (posição atual,
+    independente da Data Com — usada pela UI só pra decidir se o ativo
+    entra no grupo "Carteira" ou "Watchlist"), e "sem_direito" (True
+    quando a Data Com já passou, a quantidade nela foi 0, MAS você possui
+    o ativo hoje — sinal de "comprou depois", pra UI avisar isso em vez de
+    só mostrar um total zerado sem explicação). Mesma ordem recebida.
+    """
+    posicoes_hoje = {p["ticker"]: p["qtd_total"] for p in consolidar_posicoes(compras, eventos)}
+    cache_por_data: dict[str, dict[str, float]] = {}
+    resultado = []
+    for item in proximos:
+        data_com = item.get("data_com")
+        sem_direito = False
+        if data_com and data_com <= hoje:
+            if data_com not in cache_por_data:
+                compras_ate = [c for c in compras if (c.get("data") or "") <= data_com]
+                eventos_ate = [e for e in eventos if (e.get("data") or "") <= data_com]
+                ledger = construir_ledger(compras_ate, eventos_ate)
+                cache_por_data[data_com] = {t: v["qtd"] for t, v in ledger.posicoes.items()}
+            quantidade = cache_por_data[data_com].get(item["ticker"], 0.0)
+            if quantidade <= 1e-6 and posicoes_hoje.get(item["ticker"], 0.0) > 1e-6:
+                sem_direito = True
+        else:
+            quantidade = posicoes_hoje.get(item["ticker"], 0.0)
+        resultado.append({
+            **item,
+            "quantidade": quantidade,
+            "total": item["valor_por_acao"] * quantidade,
+            "quantidade_hoje": posicoes_hoje.get(item["ticker"], 0.0),
+            "sem_direito": sem_direito,
+        })
+    return resultado
+
+
 def proventos_12m(proventos: list[dict]) -> float:
     """Usado no card 'Proventos (12m)' da Visão Geral."""
     um_ano_atras = date.today() - timedelta(days=365)

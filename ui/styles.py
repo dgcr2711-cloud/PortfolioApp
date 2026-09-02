@@ -65,6 +65,11 @@ CSS_GLOBAL = f"""
 .badge-destaque {{ background: rgba(212,175,55,0.14); color: {COR_DESTAQUE}; border: 1px solid rgba(212,175,55,0.4); }}
 .texto-apagado {{ color: #6b7280; font-size: 12px; }}
 
+/* Linha de badges lado a lado (ex: resumo "Por tipo" da aba Proventos) —
+   substitui o que antes eram vários st.metric grandes por pílulas
+   pequenas, mais compactas e sem competir em destaque com os KPIs. */
+.linha-badges {{ display: flex; flex-wrap: wrap; gap: 6px; margin: 0.15rem 0 1.15rem 0; }}
+
 /* Tabela "manual" (Visão Geral / Carteira / Fundamentos) para reproduzir
    exatamente o mesmo layout de colunas do dashboard original. */
 table.tabela-carteira {{ width: 100%; border-collapse: collapse; font-size: 13px; }}
@@ -103,6 +108,70 @@ table.tabela-carteira .setor {{ font-size: 11px; color: #9ca3af; }}
     display: inline-block; font-size: 10px; color: #6b7280; margin-top: 0.5rem;
     letter-spacing: 0.02em;
 }}
+
+/* "Mapa de Dividendos" (aba Proventos) — grade de Ticker x Mês agrupada por
+   setor, no estilo dos mapas de calor de dividendo (linhas = ativos,
+   colunas = Jan..Dez, célula destacada = mês em que o ativo historicamente
+   pagou). A opacidade da célula vem de quantas vezes esse mês já se repetiu
+   no histórico do usuário (mais repetições = mais destaque). */
+table.mapa-dividendos {{ width: 100%; border-collapse: collapse; font-size: 12px; }}
+table.mapa-dividendos th {{
+    text-align: center; padding: 6px 3px; color: #9ca3af; font-size: 10px;
+    text-transform: uppercase; border-bottom: 1px solid #374151; font-weight: 600;
+}}
+table.mapa-dividendos th.col-ticker {{ text-align: left; padding-left: 8px; }}
+table.mapa-dividendos td {{
+    padding: 5px 3px; border-bottom: 1px solid #202836; text-align: center; vertical-align: middle;
+}}
+table.mapa-dividendos td.col-ticker {{
+    text-align: left; padding-left: 8px; font-weight: 700; color: #ffffff; white-space: nowrap;
+}}
+table.mapa-dividendos tr.linha-setor td {{
+    background: rgba(255,255,255,0.04); font-weight: 700; color: {COR_DESTAQUE};
+    text-transform: uppercase; font-size: 10px; letter-spacing: 0.06em;
+    padding: 8px 3px 6px 8px; text-align: left; border-bottom: 1px solid #374151;
+}}
+table.mapa-dividendos .mes-pago {{ border-radius: 5px; color: {COR_POSITIVO}; font-weight: 700; }}
+table.mapa-dividendos .mes-anunciado {{
+    border-radius: 5px; color: {COR_INFO}; font-weight: 700; border: 1px dashed rgba(56,189,248,0.55);
+}}
+table.mapa-dividendos .mes-vazio {{ color: #2b3544; }}
+table.mapa-dividendos tr.linha-so-automatica td.col-ticker {{ color: {COR_INFO}; }}
+
+/* Cards de "Próximos Dividendos" (aba Proventos) — layout inspirado no
+   app "Agenda Dividendos" que o usuário mostrou como referência: um card
+   arredondado por grupo (Carteira / Watchlist), cabeçalho colorido,
+   tabela compacta e uma linha de total somado no rodapé. Mantido no
+   MESMO tema escuro do resto do app (não a paleta clara/verde-água do
+   app de referência), pra não destoar visualmente das outras abas. */
+.card-proximos-proventos {{
+    background: {COR_FUNDO_CARD}; border: 1px solid #313d4f; border-radius: 0.85rem;
+    overflow: hidden; margin-bottom: 1.25rem; box-shadow: 0 1px 2px rgba(0,0,0,0.25);
+}}
+.card-proximos-proventos .cabecalho-grupo {{
+    background: linear-gradient(90deg, {COR_POSITIVO} 0%, #0f9c73 100%);
+    color: #06231a; font-weight: 700; padding: 0.6rem 1rem; font-size: 0.95rem;
+}}
+table.tabela-proximos-proventos {{ width: 100%; border-collapse: collapse; font-size: 13px; }}
+table.tabela-proximos-proventos th {{
+    text-align: right; padding: 8px 12px; color: #9ca3af; font-size: 10.5px;
+    text-transform: uppercase; border-bottom: 1px solid #374151; font-weight: 600;
+}}
+table.tabela-proximos-proventos th.col-esquerda {{ text-align: left; }}
+table.tabela-proximos-proventos td {{
+    padding: 7px 12px; border-bottom: 1px solid #202836; text-align: right; color: #e5e7eb;
+}}
+table.tabela-proximos-proventos td.col-esquerda {{ text-align: left; }}
+table.tabela-proximos-proventos td.col-ticker {{ font-weight: 700; color: #ffffff; }}
+table.tabela-proximos-proventos td.col-total {{ font-weight: 700; color: {COR_POSITIVO}; }}
+table.tabela-proximos-proventos td.col-total.sem-direito {{
+    font-weight: 500; color: {COR_NEGATIVO}; font-size: 12px; font-style: italic;
+}}
+.card-proximos-proventos .rodape-total {{
+    display: flex; justify-content: space-between; padding: 0.6rem 1rem;
+    background: rgba(255,255,255,0.03); font-size: 0.85rem; color: #9ca3af;
+}}
+.card-proximos-proventos .rodape-total strong {{ color: {COR_POSITIVO}; font-size: 0.95rem; }}
 </style>
 """
 

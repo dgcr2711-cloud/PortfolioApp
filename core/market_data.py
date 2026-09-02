@@ -17,7 +17,7 @@ novo, então ele sempre força uma consulta nova ao Yahoo Finance.
 from __future__ import annotations
 
 import time
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any
 
 import streamlit as st
@@ -25,6 +25,7 @@ import yfinance as yf
 
 from core.config import (
     CACHE_TTL_COTACAO_SEGUNDOS,
+    CACHE_TTL_DIVIDENDOS_SEGUNDOS,
     CACHE_TTL_NOME_EMPRESA_SEGUNDOS,
     SUFIXO_B3,
     TICKER_IBOVESPA,
@@ -200,3 +201,107 @@ def limpar_cache_cotacoes() -> None:
     """Força a próxima busca a ignorar o cache — usado pelo botão 'Atualizar Dados'."""
     _buscar_preco_yahoo.clear()
     _buscar_nome_empresa.clear()
+
+
+# ==========================================================================
+# Próximo Dividendo/JCP previsto (aba Proventos → "Próximos Dividendos")
+#
+# IMPORTANTE — leia antes de mexer aqui: o Yahoo Finance mantém esse dado
+# ("próxima data de dividendo") de forma bem mais completa para ações dos
+# EUA do que para a B3. Para muitos ativos brasileiros ele simplesmente não
+# existe ou está desatualizado — então retornar None para a maioria dos
+# tickers é o comportamento ESPERADO, não um bug. Por isso a busca é
+# deliberadamente tolerante: tenta dois campos diferentes do yfinance
+# (Ticker.calendar e, se não achar nada ali, Ticker.info) e qualquer falha
+# vira "sem previsão" silenciosamente, em vez de erro.
+# ==========================================================================
+
+def _extrair_data_do_calendar(ticker_obj: "yf.Ticker") -> date | None:
+    """
+    `Ticker.calendar` é um dict que, quando o Yahoo Finance tem o dado,
+    costuma trazer as chaves "Dividend Date" e/ou "Ex-Dividend Date" — mas
+    o formato não é garantido (pode até faltar essas chaves, ou o `calendar`
+    inteiro pode vir vazio), daí o `.get()` duplo e o try/except.
+    """
+    try:
+        calendario = ticker_obj.calendar
+    except Exception:
+        return None
+    if not isinstance(calendario, dict):
+        return None
+    valor = calendario.get("Dividend Date") or calendario.get("Ex-Dividend Date")
+    return _normalizar_data_yahoo(valor)
+
+
+def _extrair_data_do_info(ticker_obj: "yf.Ticker") -> date | None:
+    """Fallback: `Ticker.info["exDividendDate"]` (só a data ex, sem data de pagamento — o próprio yfinance não expõe a data de pagamento)."""
+    try:
+        info = ticker_obj.info
+    except Exception:
+        return None
+    if not isinstance(info, dict):
+        return None
+    return _normalizar_data_yahoo(info.get("exDividendDate"))
+
+
+def _normalizar_data_yahoo(valor: Any) -> date | None:
+    """O yfinance devolve datas em formatos diferentes dependendo do campo/versão — às vezes `date`/`datetime`, às vezes timestamp Unix (segundos). Normaliza os dois; qualquer outra coisa vira None."""
+    if valor is None:
+        return None
+    if isinstance(valor, datetime):
+        return valor.date()
+    if isinstance(valor, date):
+        return valor
+    if isinstance(valor, (int, float)):
+        try:
+            return datetime.fromtimestamp(valor).date()
+        except (OSError, OverflowError, ValueError):
+            return None
+    return None
+
+
+@st.cache_data(ttl=CACHE_TTL_DIVIDENDOS_SEGUNDOS, show_spinner=False)
+def _buscar_proximo_dividendo_yahoo(symbolo_yahoo: str) -> str | None:
+    """Devolve a data prevista (string ISO, para ficar seguro no cache) ou None. Ver nota no topo desta seção sobre None ser o resultado comum para a B3."""
+    for tentativa in range(1, _TENTATIVAS_POR_TICKER + 1):
+        try:
+            ticker_obj = yf.Ticker(symbolo_yahoo)
+            data_prevista = _extrair_data_do_calendar(ticker_obj) or _extrair_data_do_info(ticker_obj)
+            if data_prevista is not None:
+                return data_prevista.isoformat()
+            return None  # consultou com sucesso, mas o Yahoo não tem esse dado — não vale repetir
+        except Exception:
+            pass
+        if tentativa < _TENTATIVAS_POR_TICKER:
+            time.sleep(_PAUSA_ENTRE_TENTATIVAS_SEGUNDOS)
+    return None
+
+
+def buscar_proximo_dividendo(ticker: str) -> date | None:
+    """Data prevista do próximo dividendo/JCP de um ativo da B3 (ex: 'PETR4'), ou None se o Yahoo Finance não tiver esse dado (comum — ver nota no topo desta seção)."""
+    symbolo = f"{ticker}{SUFIXO_B3}"
+    resultado = _buscar_proximo_dividendo_yahoo(symbolo)
+    return date.fromisoformat(resultado) if resultado else None
+
+
+def buscar_proximos_dividendos(tickers: list[str]) -> list[dict[str, Any]]:
+    """
+    Busca a data prevista do próximo dividendo/JCP para cada ticker da
+    lista. Só os ativos em que o Yahoo Finance tem esse dado aparecem no
+    resultado — uma lista bem menor que o total de tickers é normal (ver
+    nota no topo desta seção). Ordenado pela data mais próxima primeiro.
+    """
+    encontrados = []
+    for indice, ticker in enumerate(tickers):
+        if indice > 0:
+            time.sleep(_PAUSA_ENTRE_TICKERS_SEGUNDOS)
+        data_prevista = buscar_proximo_dividendo(ticker)
+        if data_prevista is not None:
+            encontrados.append({"ticker": ticker, "data_prevista": data_prevista.isoformat()})
+    encontrados.sort(key=lambda d: d["data_prevista"])
+    return encontrados
+
+
+def limpar_cache_dividendos() -> None:
+    """Força a próxima busca de 'Próximos Dividendos' a ignorar o cache — usado pelo botão dedicado na aba Proventos (separado do 'Atualizar Dados' de propósito, pra não deixar ele mais lento)."""
+    _buscar_proximo_dividendo_yahoo.clear()

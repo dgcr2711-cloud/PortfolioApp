@@ -279,6 +279,214 @@ def test_resumo_proventos_total_investido_zero_nao_quebra():
     assert resumo["yield_on_cost"] == 0.0
 
 
+def test_resumo_proventos_por_tipo_agrupa_e_soma_por_tipo():
+    proventos = [
+        {"valor": 100.0, "tipo": "Dividendo"},
+        {"valor": 30.0, "tipo": "JCP"},
+        {"valor": 20.0, "tipo": "Dividendo"},
+        {"valor": 15.0, "tipo": "Rendimento"},
+    ]
+    linhas = calc.resumo_proventos_por_tipo(proventos)
+
+    por_tipo = {l["tipo"]: l for l in linhas}
+    assert por_tipo["Dividendo"]["total"] == pytest.approx(120.0)
+    assert por_tipo["Dividendo"]["quantidade"] == 2
+    assert por_tipo["JCP"]["total"] == pytest.approx(30.0)
+    assert por_tipo["JCP"]["quantidade"] == 1
+    assert por_tipo["Rendimento"]["total"] == pytest.approx(15.0)
+
+
+def test_resumo_proventos_por_tipo_ordena_do_maior_pro_menor():
+    proventos = [
+        {"valor": 10.0, "tipo": "Rendimento"},
+        {"valor": 500.0, "tipo": "Dividendo"},
+        {"valor": 200.0, "tipo": "JCP"},
+    ]
+    linhas = calc.resumo_proventos_por_tipo(proventos)
+    assert [l["tipo"] for l in linhas] == ["Dividendo", "JCP", "Rendimento"]
+
+
+def test_resumo_proventos_por_tipo_lista_vazia_sem_proventos():
+    assert calc.resumo_proventos_por_tipo([]) == []
+
+
+def test_mapa_dividendos_por_ticker_agrupa_meses_e_calcula_valor_medio():
+    proventos = [
+        {"ticker": "ITUB4", "data": "2025-03-10", "valor": 10.0},
+        {"ticker": "ITUB4", "data": "2025-06-10", "valor": 20.0},
+        {"ticker": "ITUB4", "data": "2024-03-15", "valor": 30.0},  # mesmo mês (março) de novo, ano diferente
+        {"ticker": "VALE3", "data": "2025-01-05", "valor": 100.0},
+    ]
+    mapa = calc.mapa_dividendos_por_ticker(proventos)
+    por_ticker = {m["ticker"]: m for m in mapa}
+
+    assert por_ticker["ITUB4"]["meses"] == [3, 6]  # março aparece 1x na lista de meses, não repetido
+    assert por_ticker["ITUB4"]["quantidade_pagamentos"] == 3
+    assert por_ticker["ITUB4"]["valor_medio_por_pagamento"] == pytest.approx(20.0)  # (10+20+30)/3
+    assert por_ticker["ITUB4"]["contagem_por_mes"] == {3: 2, 6: 1}  # março pagou 2x (anos diferentes), junho 1x
+
+    assert por_ticker["VALE3"]["meses"] == [1]
+    assert por_ticker["VALE3"]["valor_medio_por_pagamento"] == pytest.approx(100.0)
+    assert por_ticker["VALE3"]["contagem_por_mes"] == {1: 1}
+
+
+def test_mapa_dividendos_por_ticker_ordena_por_ticker():
+    proventos = [
+        {"ticker": "VALE3", "data": "2025-01-05", "valor": 1.0},
+        {"ticker": "ITUB4", "data": "2025-01-05", "valor": 1.0},
+        {"ticker": "PETR4", "data": "2025-01-05", "valor": 1.0},
+    ]
+    mapa = calc.mapa_dividendos_por_ticker(proventos)
+    assert [m["ticker"] for m in mapa] == ["ITUB4", "PETR4", "VALE3"]
+
+
+def test_mapa_dividendos_por_ticker_ignora_provento_sem_data_valida():
+    proventos = [
+        {"ticker": "ITUB4", "data": "2025-03-10", "valor": 10.0},
+        {"ticker": "ITUB4", "data": "", "valor": 999.0},
+        {"ticker": "ITUB4", "data": None, "valor": 999.0},
+    ]
+    mapa = calc.mapa_dividendos_por_ticker(proventos)
+    assert mapa[0]["quantidade_pagamentos"] == 1
+    assert mapa[0]["valor_medio_por_pagamento"] == pytest.approx(10.0)
+
+
+def test_mapa_dividendos_por_ticker_lista_vazia_sem_proventos():
+    assert calc.mapa_dividendos_por_ticker([]) == []
+
+
+def test_mapa_dividendos_por_ticker_data_minima_ignora_proventos_anteriores():
+    proventos = [
+        {"ticker": "ITUB4", "data": "2026-02-15", "valor": 999.0},  # antes do corte
+        {"ticker": "ITUB4", "data": "2026-03-01", "valor": 10.0},   # exatamente no corte
+        {"ticker": "ITUB4", "data": "2026-06-10", "valor": 20.0},
+    ]
+    mapa = calc.mapa_dividendos_por_ticker(proventos, data_minima="2026-03-01")
+    por_ticker = {m["ticker"]: m for m in mapa}
+    assert por_ticker["ITUB4"]["quantidade_pagamentos"] == 2  # o de fevereiro ficou de fora
+    assert por_ticker["ITUB4"]["valor_medio_por_pagamento"] == pytest.approx(15.0)  # (10+20)/2
+
+
+def test_mapa_dividendos_por_ticker_data_minima_none_nao_filtra_nada():
+    proventos = [{"ticker": "ITUB4", "data": "2020-01-01", "valor": 10.0}]
+    mapa = calc.mapa_dividendos_por_ticker(proventos, data_minima=None)
+    assert mapa[0]["quantidade_pagamentos"] == 1
+
+
+def test_fluxo_mensal_estimado_dividendos_soma_por_mes_entre_tickers():
+    proventos = [
+        {"ticker": "ITUB4", "data": "2025-03-10", "valor": 10.0},   # ITUB4 paga em março
+        {"ticker": "VALE3", "data": "2025-03-20", "valor": 50.0},   # VALE3 também paga em março
+        {"ticker": "VALE3", "data": "2025-09-20", "valor": 50.0},   # e em setembro
+    ]
+    fluxo = calc.fluxo_mensal_estimado_dividendos(proventos)
+
+    assert len(fluxo) == 12
+    assert fluxo[2] == pytest.approx(60.0)  # março (índice 2): 10 (ITUB4) + 50 (VALE3)
+    assert fluxo[8] == pytest.approx(50.0)  # setembro (índice 8): só VALE3
+    assert fluxo[0] == pytest.approx(0.0)   # janeiro: nada
+
+
+def test_fluxo_mensal_estimado_dividendos_lista_de_zeros_sem_proventos():
+    assert calc.fluxo_mensal_estimado_dividendos([]) == [0.0] * 12
+
+
+def test_fluxo_mensal_estimado_dividendos_respeita_data_minima():
+    proventos = [
+        {"ticker": "ITUB4", "data": "2025-03-10", "valor": 10.0},  # antes do corte, deve sumir
+        {"ticker": "VALE3", "data": "2026-09-20", "valor": 50.0},
+    ]
+    fluxo = calc.fluxo_mensal_estimado_dividendos(proventos, data_minima="2026-03-01")
+    assert fluxo[2] == pytest.approx(0.0)   # março: o provento de ITUB4 foi filtrado
+    assert fluxo[8] == pytest.approx(50.0)  # setembro: VALE3 continua
+
+
+# ==========================================================================
+# enriquecer_proximos_com_total
+# ==========================================================================
+
+def _compra(ticker, data, qtd, preco=10.0, tipo="compra"):
+    return {"ticker": ticker, "data": data, "qtd": qtd, "preco": preco, "taxas": 0.0, "tipo": tipo}
+
+
+def test_enriquecer_proximos_com_total_data_com_futura_usa_quantidade_de_hoje():
+    proximos = [{"ticker": "ITUB4", "valor_por_acao": 0.015, "tipo": "JCP", "data_com": "2026-12-01"}]
+    compras = [_compra("ITUB4", "2026-03-10", 200)]
+    resultado = calc.enriquecer_proximos_com_total(proximos, compras, [], hoje="2026-08-31")
+    assert resultado[0]["quantidade"] == pytest.approx(200.0)
+    assert resultado[0]["total"] == pytest.approx(3.0)  # 0.015 * 200
+    assert resultado[0]["sem_direito"] is False
+
+
+def test_enriquecer_proximos_com_total_zero_para_ticker_so_watchlist():
+    proximos = [{"ticker": "PETR4", "valor_por_acao": 0.47, "tipo": "Dividendo", "data_com": "2026-12-01"}]
+    resultado = calc.enriquecer_proximos_com_total(proximos, compras=[], eventos=[], hoje="2026-08-31")
+    assert resultado[0]["quantidade"] == 0.0
+    assert resultado[0]["total"] == 0.0
+    assert resultado[0]["quantidade_hoje"] == 0.0
+    assert resultado[0]["sem_direito"] is False  # não tem o ativo hoje, não é "comprou depois"
+
+
+def test_enriquecer_proximos_com_total_comprou_depois_da_data_com_fica_sem_direito():
+    # Exatamente o caso relatado: comprou CPFE3 DEPOIS da Data Com de um
+    # provento já anunciado — tem o ativo hoje, mas não tinha na Data Com.
+    proximos = [{"ticker": "CPFE3", "valor_por_acao": 3.73, "tipo": "Dividendo", "data_com": "2026-04-29"}]
+    compras = [_compra("CPFE3", "2026-05-15", 100)]  # comprou DEPOIS da Data Com
+    resultado = calc.enriquecer_proximos_com_total(proximos, compras, [], hoje="2026-08-31")
+    assert resultado[0]["quantidade"] == 0.0       # não valia pra esse provento
+    assert resultado[0]["total"] == 0.0
+    assert resultado[0]["quantidade_hoje"] == pytest.approx(100.0)  # mas tem o ativo hoje
+    assert resultado[0]["sem_direito"] is True
+
+
+def test_enriquecer_proximos_com_total_comprou_antes_da_data_com_tem_direito():
+    proximos = [{"ticker": "CPFE3", "valor_por_acao": 3.73, "tipo": "Dividendo", "data_com": "2026-04-29"}]
+    compras = [_compra("CPFE3", "2026-03-01", 100)]  # comprou ANTES da Data Com
+    resultado = calc.enriquecer_proximos_com_total(proximos, compras, [], hoje="2026-08-31")
+    assert resultado[0]["quantidade"] == pytest.approx(100.0)
+    assert resultado[0]["total"] == pytest.approx(373.0)
+    assert resultado[0]["sem_direito"] is False
+
+
+def test_enriquecer_proximos_com_total_venda_antes_da_data_com_tambem_fica_sem_direito():
+    proximos = [{"ticker": "CPFE3", "valor_por_acao": 3.73, "tipo": "Dividendo", "data_com": "2026-04-29"}]
+    compras = [
+        _compra("CPFE3", "2026-01-01", 100),
+        _compra("CPFE3", "2026-04-01", 100, tipo="venda"),  # vendeu tudo antes da Data Com
+    ]
+    resultado = calc.enriquecer_proximos_com_total(proximos, compras, [], hoje="2026-08-31")
+    assert resultado[0]["quantidade"] == 0.0
+    assert resultado[0]["quantidade_hoje"] == 0.0  # também não tem mais hoje
+    assert resultado[0]["sem_direito"] is False  # não é "comprou depois": nunca teve na Data Com nem tem hoje
+
+
+def test_enriquecer_proximos_com_total_data_com_ausente_usa_quantidade_de_hoje():
+    proximos = [{"ticker": "ITUB4", "valor_por_acao": 0.015, "tipo": "JCP", "data_com": None}]
+    compras = [_compra("ITUB4", "2026-03-10", 200)]
+    resultado = calc.enriquecer_proximos_com_total(proximos, compras, [], hoje="2026-08-31")
+    assert resultado[0]["quantidade"] == pytest.approx(200.0)
+
+
+def test_enriquecer_proximos_com_total_nao_modifica_o_item_original():
+    original = {"ticker": "ITUB4", "valor_por_acao": 0.015, "tipo": "JCP", "data_com": "2026-12-01"}
+    proximos = [original]
+    calc.enriquecer_proximos_com_total(proximos, [_compra("ITUB4", "2026-03-10", 100)], [], hoje="2026-08-31")
+    assert "total" not in original  # o dict original não foi alterado, só uma cópia
+
+
+def test_enriquecer_proximos_com_total_preserva_ordem():
+    proximos = [
+        {"ticker": "VALE3", "valor_por_acao": 1.0, "tipo": "Dividendo", "data_com": "2026-12-01"},
+        {"ticker": "ITUB4", "valor_por_acao": 2.0, "tipo": "JCP", "data_com": "2026-12-01"},
+    ]
+    resultado = calc.enriquecer_proximos_com_total(proximos, [], [], hoje="2026-08-31")
+    assert [r["ticker"] for r in resultado] == ["VALE3", "ITUB4"]
+
+
+def test_enriquecer_proximos_com_total_lista_vazia():
+    assert calc.enriquecer_proximos_com_total([], [], [], hoje="2026-08-31") == []
+
+
 # ==========================================================================
 # TWR vs. Ibovespa
 # ==========================================================================

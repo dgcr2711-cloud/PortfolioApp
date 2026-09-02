@@ -17,8 +17,10 @@ import streamlit as st
 
 from core import calculations as calc
 from core import teses
+from core.config import COR_NEGATIVO, COR_POSITIVO
 from core.formatting import formatar_moeda_priv, formatar_pct
 from ui.ativos import todos_os_tickers
+from ui.styles import card_kpi_html, render_cards
 
 
 def _formatar_data_hora(data_iso: str) -> str:
@@ -95,15 +97,17 @@ def _painel_contexto(dados: dict, ticker: str, ocultar_valores: bool) -> None:
     pt = dados.get("precosTeto", {}).get(ticker)
     preco_teto = pt["precoTeto"] if pt else None
 
-    col1, col2, col3, col4 = st.columns(4)
+    cards = []
     if posicao:
-        col1.metric("Preço Médio", formatar_moeda_priv(posicao["preco_medio_ponderado"], ocultar_valores))
-        col2.metric("Cotação Atual", formatar_moeda_priv(posicao["cotacao_atual"], False))
+        cards.append(card_kpi_html("Preço Médio", formatar_moeda_priv(posicao["preco_medio_ponderado"], ocultar_valores)))
+        cards.append(card_kpi_html("Cotação Atual", formatar_moeda_priv(posicao["cotacao_atual"], False)))
         sinal = "+" if posicao["lucro_pct"] >= 0 else ""
-        col3.metric("Resultado", f"{sinal}{formatar_pct(posicao['lucro_pct'])}")
+        cor_resultado = COR_POSITIVO if posicao["lucro_pct"] >= 0 else COR_NEGATIVO
+        cards.append(card_kpi_html("Resultado", f"{sinal}{formatar_pct(posicao['lucro_pct'])}", cor_valor=cor_resultado))
     else:
-        col1.metric("Preço Médio", "— empresa-alvo")
+        cards.append(card_kpi_html("Preço Médio", "— empresa-alvo"))
         cot = dados["cotacoes"].get(ticker)
-        col2.metric("Cotação Atual", formatar_moeda_priv(cot["preco"], False) if cot else "— sem cotação")
-        col3.metric("Resultado", "—")
-    col4.metric("Preço Teto", formatar_moeda_priv(preco_teto, False) if preco_teto else "— não calculado")
+        cards.append(card_kpi_html("Cotação Atual", formatar_moeda_priv(cot["preco"], False) if cot else "— sem cotação"))
+        cards.append(card_kpi_html("Resultado", "—"))
+    cards.append(card_kpi_html("Preço Teto", formatar_moeda_priv(preco_teto, False) if preco_teto else "— não calculado"))
+    render_cards(cards)

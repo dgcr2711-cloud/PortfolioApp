@@ -114,6 +114,12 @@ def gerar_csv_posicoes(dados: dict[str, Any]) -> str:
     return df.to_csv(index=False, sep=";", decimal=",")
 
 
+def gerar_csv_proventos(dados: dict[str, Any]) -> str:
+    """CSV simples (separador ';', igual ao padrão do Excel em português) só com o histórico de proventos."""
+    df = montar_dataframe_proventos(dados)
+    return df.to_csv(index=False, sep=";", decimal=",")
+
+
 def gerar_excel_carteira(dados: dict[str, Any]) -> bytes:
     """
     Um único arquivo .xlsx com 4 abas: Posições, Proventos, Compras e Vendas,

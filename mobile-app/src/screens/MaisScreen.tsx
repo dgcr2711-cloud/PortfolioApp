@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { SegmentedControl } from '../components/SegmentedControl';
 import { cores, espacamento } from '../theme';
+import { useEspacoTopo } from '../hooks/useEspacoTopo';
 import { ProventosScreen } from './ProventosScreen';
 import { PrecoTetoScreen } from './PrecoTetoScreen';
 import { EvolucaoScreen } from './EvolucaoScreen';
@@ -19,10 +20,11 @@ type SubAba = 'proventos' | 'precoTeto' | 'evolucao' | 'impostoRenda' | 'tese' |
  */
 export function MaisScreen() {
   const [subAba, setSubAba] = useState<SubAba>('proventos');
+  const espacoTopo = useEspacoTopo(espacamento.lg);
 
   return (
     <View style={estilos.container}>
-      <View style={estilos.seletor}>
+      <View style={[estilos.seletor, { paddingTop: espacoTopo }]}>
         <SegmentedControl
           opcoes={[
             { valor: 'proventos', rotulo: '📅 Proventos' },
@@ -50,6 +52,6 @@ export function MaisScreen() {
 
 const estilos = StyleSheet.create({
   container: { flex: 1, backgroundColor: cores.fundoApp },
-  seletor: { paddingHorizontal: espacamento.lg, paddingTop: espacamento.lg, paddingBottom: espacamento.sm },
+  seletor: { paddingHorizontal: espacamento.lg, paddingBottom: espacamento.sm },
   conteudo: { flex: 1 },
 });

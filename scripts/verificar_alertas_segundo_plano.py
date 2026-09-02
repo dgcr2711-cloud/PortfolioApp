@@ -89,8 +89,11 @@ def main() -> int:
 
     salvar_dados(dados)  # também grava no Firestore, pra manter o PC e os dashboards em dia
 
-    plural = "s" if enviados != 1 else ""
-    print(f"[alertas] Verificação concluída. {enviados} mensagem{plural} de WhatsApp enviada{plural}.")
+    # "mensagem" -> "mensagens" no plural (não é só acrescentar "s" — muda o
+    # "m" final pra "n" antes do "s"; a versão antiga gerava "mensagems").
+    mensagem_plural = "mensagens" if enviados != 1 else "mensagem"
+    enviada_plural = "enviadas" if enviados != 1 else "enviada"
+    print(f"[alertas] Verificação concluída. {enviados} {mensagem_plural} de WhatsApp {enviada_plural}.")
     return 0
 
 

@@ -68,6 +68,22 @@ def render(dados: dict, ocultar_valores: bool, salvar) -> None:
         card_kpi_html("Rentabilidade Geral", f"{sinal_lucro}{formatar_pct(totais['rentabilidade_pct'])}", cor_valor=cor_lucro),
     ])
 
+    # Duas sub-abas (2026-09-02, mesma lógica da divisão já feita em
+    # Fundamentos/Imposto de Renda/Compras): "o que eu tenho" (posições +
+    # alocação) separado de "pra onde eu quero ir" (metas + rebalanceamento)
+    # — antes a seção de metas ficava sempre visível, empilhada embaixo da
+    # tabela de posições, obrigando a rolar mesmo pra quem só queria ver a
+    # carteira atual.
+    aba_posicoes, aba_metas = st.tabs(["📌 Posições & Alocação", "🎯 Metas & Rebalanceamento"])
+
+    with aba_posicoes:
+        _aba_posicoes_e_alocacao(dados, ocultar_valores, posicoes, salvar)
+
+    with aba_metas:
+        _secao_rebalanceamento(dados, ocultar_valores, posicoes, salvar)
+
+
+def _aba_posicoes_e_alocacao(dados: dict, ocultar_valores: bool, posicoes: list[dict], salvar) -> None:
     col_tabela, col_grafico = st.columns([2, 1])
 
     with col_tabela:
@@ -129,11 +145,8 @@ def render(dados: dict, ocultar_valores: bool, salvar) -> None:
         else:
             st.caption("Registre uma compra primeiro para poder classificar por setor.")
 
-    _secao_rebalanceamento(dados, ocultar_valores, posicoes, salvar)
-
 
 def _secao_rebalanceamento(dados: dict, ocultar_valores: bool, posicoes: list[dict], salvar) -> None:
-    st.subheader("🎯 Metas de Alocação & Rebalanceamento")
     st.caption(
         "Defina o % da carteira que cada ativo DEVERIA ter. Quando a cotação se mexe, o peso real se "
         "afasta da meta — aqui você vê o desvio e quanto compraria/venderia (em R$) para voltar ao alvo. "

@@ -24,6 +24,21 @@ def render(dados: dict, salvar) -> None:
     st.title("Configurações")
     st.caption("Alertas de preço, lista de observação e backup dos dados")
 
+    st.subheader("🔄 Atualização Automática")
+    atualizar_ao_abrir = st.toggle(
+        "Atualizar dados sozinho ao abrir o app",
+        value=dados.get("atualizarAutomaticamenteAoAbrir", True),
+        help=(
+            'Quando ligado, o app já roda "🔄 Atualizar Dados" (cotações no Yahoo Finance + '
+            "proventos anunciados na B3) sozinho, uma vez, assim que você abre — seja pela pasta "
+            '(Iniciar App.bat) ou por um link salvo. Desligue se preferir que o app abra mais '
+            'rápido e prefira clicar em "🔄 Atualizar Dados" você mesmo quando quiser.'
+        ),
+    )
+    if atualizar_ao_abrir != dados.get("atualizarAutomaticamenteAoAbrir", True):
+        dados["atualizarAutomaticamenteAoAbrir"] = atualizar_ao_abrir
+        salvar(dados)
+
     col1, col2 = st.columns(2)
 
     with col1:
@@ -35,6 +50,15 @@ def render(dados: dict, salvar) -> None:
             if st.form_submit_button("Salvar Alerta"):
                 if ticker:
                     dados["alertas"][ticker] = preco_alvo
+                    # Limpa a "memória de já avisei" desse ticker (usada em
+                    # core/notificacoes_whatsapp.py pra não mandar a mesma
+                    # mensagem toda hora). Sem isso, um ticker que ficou
+                    # marcado como "já notificado" em algum momento no
+                    # passado (inclusive na época do alerta por e-mail, que
+                    # usava essa mesma marcação) ficaria preso nesse estado
+                    # e nunca mais receberia aviso novo por WhatsApp, mesmo
+                    # trocando o preço-alvo.
+                    dados.setdefault("alertasEnviados", {}).pop(ticker, None)
                     salvar(dados)
                     st.rerun()
 
@@ -44,6 +68,9 @@ def render(dados: dict, salvar) -> None:
                 c1.write(f"**{ticker}** — {formatar_moeda(preco)}")
                 if c2.button("Remover", key=f"rm_alerta_{ticker}"):
                     del dados["alertas"][ticker]
+                    # Mesmo motivo do "Salvar Alerta" acima: se remover e
+                    # recriar o alerta depois, começa do zero.
+                    dados.setdefault("alertasEnviados", {}).pop(ticker, None)
                     salvar(dados)
                     st.rerun()
         else:

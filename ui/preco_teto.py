@@ -13,8 +13,9 @@ import pandas as pd
 import streamlit as st
 
 from core import calculations as calc
-from core.config import LINKS_RI
+from core.config import COR_DESTAQUE, LINKS_RI
 from core.formatting import formatar_moeda
+from ui.styles import card_kpi_html, render_cards
 
 
 def render(dados: dict, salvar) -> None:
@@ -57,9 +58,13 @@ def render(dados: dict, salvar) -> None:
                 except ValueError as e:
                     st.error(str(e))
                 else:
-                    c1, c2 = st.columns(2)
-                    c1.metric("Preço Teto", formatar_moeda(resultado.preco_teto))
-                    c2.metric(f"Preço Teto c/ margem de {margem:g}%", formatar_moeda(resultado.preco_teto_com_margem))
+                    render_cards([
+                        card_kpi_html("Preço Teto", formatar_moeda(resultado.preco_teto)),
+                        card_kpi_html(
+                            f"Preço Teto c/ margem de {margem:g}%", formatar_moeda(resultado.preco_teto_com_margem),
+                            cor_valor=COR_DESTAQUE, destaque=True,
+                        ),
+                    ])
                     st.markdown(
                         f"- Valor presente dos fluxos: **{formatar_moeda(resultado.vp_fluxos)} mi**\n"
                         f"- Valor presente terminal: **{formatar_moeda(resultado.vp_terminal)} mi**\n"

@@ -25,6 +25,15 @@ core/cloud_sync.py), com o formato:
         "numero": "+5511999999999",
         "apikey": "123456"
     }
+
+IMPORTANTE sobre o formato do "numero" (descoberto 2026-09-01 com um caso
+real): o CallMeBot aceita o pedido normalmente e ainda assim não entrega a
+mensagem se o número tiver o "9" extra que os celulares brasileiros
+ganharam há alguns anos — ou seja, use +55DDDNÚMERO com só 8 dígitos depois
+do DDD (ex: +553197001985), NÃO +55DDD9NÚMERO com 9 dígitos
+(+5531997001985). Isso não gera nenhum erro visível (o CallMeBot confirma
+"enviado" do mesmo jeito) — só descobre-se porque a mensagem nunca chega no
+WhatsApp de verdade.
 Se o arquivo não existir, a notificação é silenciosamente ignorada — igual
 ao padrão já usado para a sincronização com o celular e o e-mail: ninguém é
 obrigado a configurar isso, e o app continua funcionando 100% normalmente
@@ -153,10 +162,13 @@ def enviar_whatsapp(numero: str, apikey: str, mensagem: str) -> bool:
     cotações.
 
     O CallMeBot não documenta um formato de erro estruturado — tratamos
-    como sucesso uma resposta HTTP 200 cujo corpo não contenha a palavra
+    como sucesso qualquer resposta HTTP "de sucesso" (200-299; na prática o
+    CallMeBot às vezes responde 201 em vez de 200 pro mesmo caso de
+    sucesso — descoberto em 2026-09-01 com um alerta real do usuário que
+    nunca chegava por causa disso) cujo corpo não contenha a palavra
     "error" (comparação sem diferenciar maiúsculas/minúsculas); qualquer
-    outra coisa (erro de conexão, HTTP diferente de 200, "error" no corpo)
-    conta como falha.
+    outra coisa (erro de conexão, HTTP de erro, "error" no corpo) conta
+    como falha.
     """
     try:
         url = (
@@ -166,11 +178,29 @@ def enviar_whatsapp(numero: str, apikey: str, mensagem: str) -> bool:
             f"&apikey={urllib.parse.quote(apikey)}"
         )
         with urllib.request.urlopen(url, timeout=15) as resposta:
-            if resposta.status != 200:
-                return False
+            status = resposta.status
             corpo = resposta.read().decode("utf-8", errors="ignore")
-            return "error" not in corpo.lower()
-    except (urllib.error.URLError, OSError, ValueError):
+            if not (200 <= status < 300):
+                # Lê e mostra o corpo mesmo em erro (antes só mostrava o
+                # status) — se um dia aparecer outro status "estranho" como
+                # o 201, o texto do corpo já vem no log, sem precisar de
+                # mais uma rodada de teste só pra descobrir o que ele diz.
+                print(f"[alertas] Falha ao enviar WhatsApp: CallMeBot respondeu HTTP {status}: {corpo.strip()[:200]}")
+                return False
+            sucesso = "error" not in corpo.lower()
+            if sucesso:
+                if status != 200:
+                    # Caso do HTTP 201 descoberto em 2026-09-01: mostra o
+                    # corpo mesmo no sucesso, pra confirmar visivelmente
+                    # (no log) que a mensagem foi mesmo aceita pelo CallMeBot.
+                    print(f"[alertas] WhatsApp enviado (CallMeBot respondeu HTTP {status}): {corpo.strip()[:200]}")
+            else:
+                print(f"[alertas] Falha ao enviar WhatsApp: CallMeBot respondeu com um erro: {corpo.strip()[:200]}")
+            return sucesso
+    except (urllib.error.URLError, OSError, ValueError) as erro:
+        # Não expõe numero/apikey (só o tipo/motivo do erro) — ajuda a diagnosticar
+        # sem internet, apikey errada, certificado, DNS bloqueado etc.
+        print(f"[alertas] Falha ao enviar WhatsApp: {type(erro).__name__}: {erro}")
         return False
 
 

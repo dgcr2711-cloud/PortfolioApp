@@ -51,7 +51,10 @@ def render(dados: dict, ocultar_valores: bool) -> None:
     sinal = "+" if totais["lucro"] >= 0 else ""
 
     render_cards([
-        card_kpi_html("Patrimônio Atual", formatar_moeda_priv(totais["total_atual"], ocultar_valores)),
+        card_kpi_html(
+            "Patrimônio Atual", formatar_moeda_priv(totais["total_atual"], ocultar_valores),
+            cor_valor=COR_DESTAQUE, destaque=True,
+        ),
         card_kpi_html(
             "Resultado",
             f"{sinal}{formatar_moeda_priv(totais['lucro'], ocultar_valores)}",
@@ -79,8 +82,15 @@ def render(dados: dict, ocultar_valores: bool) -> None:
         cotacao_texto = formatar_moeda_priv(a["cotacao_atual"], False) if a["cotacao_atual"] is not None else '<span class="texto-apagado">—</span>'
         if a["preco_teto"] is None:
             preco_teto_texto = '<span class="texto-apagado">— sem preço teto</span>'
+            preco_teto_margem_texto = '<span class="texto-apagado">—</span>'
         else:
             preco_teto_texto = formatar_moeda_priv(a["preco_teto"], False)
+            # Preço-teto JÁ com a margem de segurança descontada — é este o
+            # número que vale como "preço bom pra comprar", não o Preço Teto
+            # cru ao lado (que é só o valor justo calculado, sem desconto de
+            # segurança nenhum). Mostrar os dois lado a lado evita a leitura
+            # errada de "dá pra comprar até o Preço Teto".
+            preco_teto_margem_texto = formatar_moeda_priv(a["preco_teto_com_margem"], False)
         motivo_texto = {
             "sem_preco_teto": "— sem preço teto",
             "sem_cotacao": "— sem cotação",
@@ -94,13 +104,14 @@ def render(dados: dict, ocultar_valores: bool) -> None:
             f'<td>{cotacao_texto}</td>'
             f'<td>{alerta_html}</td>'
             f'<td>{preco_teto_texto}</td>'
+            f'<td>{preco_teto_margem_texto}</td>'
             f'<td>{indicacao_html}</td>'
             f'</tr>'
         )
 
     tabela_html = f"""
     <table class="tabela-carteira">
-        <thead><tr><th>Ticker</th><th>Tipo</th><th>Cotação</th><th>Alerta</th><th>Preço Teto</th><th>Indicação</th></tr></thead>
+        <thead><tr><th>Ticker</th><th>Tipo</th><th>Cotação</th><th>Alerta</th><th>Preço Teto</th><th>Preço Teto c/ Margem (20%)</th><th>Indicação</th></tr></thead>
         <tbody>{''.join(linhas_html)}</tbody>
     </table>
     """

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { SegmentedControl } from '../components/SegmentedControl';
 import { cores, espacamento } from '../theme';
+import { useEspacoTopo } from '../hooks/useEspacoTopo';
 import { NovaCompraScreen } from './NovaCompraScreen';
 import { HistoricoScreen } from './HistoricoScreen';
 
@@ -14,10 +15,11 @@ type SubAba = 'nova' | 'historico';
  */
 export function ComprasScreen() {
   const [subAba, setSubAba] = useState<SubAba>('nova');
+  const espacoTopo = useEspacoTopo(espacamento.lg);
 
   return (
     <View style={estilos.container}>
-      <View style={estilos.seletor}>
+      <View style={[estilos.seletor, { paddingTop: espacoTopo }]}>
         <SegmentedControl
           opcoes={[
             { valor: 'nova', rotulo: '➕ Nova' },
@@ -36,6 +38,6 @@ export function ComprasScreen() {
 
 const estilos = StyleSheet.create({
   container: { flex: 1, backgroundColor: cores.fundoApp },
-  seletor: { paddingHorizontal: espacamento.lg, paddingTop: espacamento.lg, paddingBottom: espacamento.sm },
+  seletor: { paddingHorizontal: espacamento.lg, paddingBottom: espacamento.sm },
   conteudo: { flex: 1 },
 });

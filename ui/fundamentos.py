@@ -68,39 +68,46 @@ def render(dados: dict, salvar) -> None:
         ])
         st.caption("Médias ponderadas pelo valor atual de cada posição — ativos sem fundamento buscado ainda ficam de fora da conta (não entram como zero).")
 
-    st.subheader("📋 Indicadores por Ativo")
-    _tabela_fundamentos_html(lista_ativos, fundamentos)
+    # Duas abas (2026-09-02): "Indicadores" (tabelas do dia a dia, você volta
+    # aqui toda hora) e "Análise Avançada" (Piotroski/Altman/football field —
+    # visitada com menos frequência, e antes obrigava rolar bem mais pra
+    # chegar nela). Evita misturar as duas coisas numa coluna só.
+    aba_indicadores, aba_avancada = st.tabs(["📋 Indicadores", "🧮 Análise Avançada"])
 
-    st.subheader("🎯 Indicadores para o Preço Teto")
-    st.caption(
-        "Os mesmos números que servem de ponto de partida pra calculadora de Fluxo de Caixa Descontado da aba 🎯 Preço Teto. "
-        "O WACC, a taxa de crescimento futura (g1/g2) e a margem de segurança continuam sendo uma decisão sua — "
-        "o Yahoo Finance não fornece isso pronto, só os números abaixo. "
-        "⚠️ Empresas com mais de uma classe de ação (ON/PN/units — ex: Sanepar tem SAPR3/SAPR4/SAPR11) merecem atenção redobrada "
-        "no 'Nº de Ações': buscamos só o dado do TICKER que você tem na carteira, nunca somamos com outra classe por aqui — mas o "
-        "próprio Yahoo Finance às vezes devolve o total da empresa (todas as classes somadas) em vez de só a classe daquele ticker. "
-        "Vale conferir esse número no Fundamentus ou no site de RI da empresa antes de usar na calculadora."
-    )
-    _tabela_indicadores_preco_teto_html(lista_ativos, fundamentos)
+    with aba_indicadores:
+        st.subheader("📋 Indicadores por Ativo")
+        _tabela_fundamentos_html(lista_ativos, fundamentos)
 
-    st.markdown("---")
-    _secao_analise_avancada(dados, salvar, lista_ativos, fundamentos)
-
-    with st.expander("ℹ️ O que significa cada indicador"):
-        st.markdown(
-            "- **P/L** (Preço/Lucro): quantos anos de lucro atual seriam necessários para 'pagar' o preço da ação — quanto menor, mais barata a ação em relação ao lucro que gera hoje.\n"
-            "- **P/VP** (Preço/Valor Patrimonial): compara o preço de mercado com o patrimônio líquido por ação — abaixo de 1 pode indicar desconto, mas também pode refletir um negócio de baixa qualidade.\n"
-            "- **Dividend Yield**: proventos pagos nos últimos 12 meses em relação ao preço atual.\n"
-            "- **Payout**: % do lucro líquido dos últimos 12 meses que a empresa distribuiu como proventos — o 'complemento' do Dividend Yield: mostra se ela reparte quase tudo que lucra (payout alto, sobra pouco pra reinvestir e crescer) ou reinveste a maior parte (payout baixo). Vem pronto do Yahoo Finance.\n"
-            "- **Payout (12m calc.)**: o mesmo payout dos últimos 12 meses, só que calculado por aqui a partir das demonstrações trimestrais (dividendos pagos ÷ lucro líquido dos últimos 4 trimestres) — serve de conferência do Payout acima. Pode aparecer '—' quando faltar algum trimestre no histórico do Yahoo Finance (mais comum em empresas da B3 do que dos EUA).\n"
-            "- **ROE** (Retorno sobre o Patrimônio): quanto lucro a empresa gera para cada R$1 de patrimônio líquido — uma das métricas favoritas de investidores de valor para medir a qualidade do negócio.\n"
-            "- **Margem Líquida**: % da receita que sobra como lucro, depois de todos os custos e impostos.\n"
-            "- **Dívida/Patrimônio**: o quanto a empresa depende de dívida em relação ao capital próprio — quanto maior, maior o risco financeiro.\n"
-            "- **Beta**: sensibilidade histórica do preço em relação ao mercado (Ibovespa) — acima de 1 tende a oscilar mais que o mercado, abaixo de 1, menos.\n"
-            "- **FCF Livre (Fluxo de Caixa Livre)**: o caixa que sobra da operação depois dos investimentos necessários pro negócio funcionar — é o ponto de partida ('FCF do último ano') da calculadora de Preço Teto.\n"
-            "- **Dívida Líquida**: dívida total menos o caixa disponível — usada na calculadora de Preço Teto pra ir do valor da empresa inteira ao valor que sobra pro acionista.\n"
-            "- **Nº de Ações**: ações em circulação DO TICKER que você tem — buscamos só o dado dessa listagem específica, nunca somamos com outra classe (ON/PN/units) por aqui. Ainda assim, pra empresas com mais de uma classe (ex: Sanepar: SAPR3/SAPR4/SAPR11), o próprio Yahoo Finance às vezes reporta o total da empresa em vez de só essa classe — vale conferir no Fundamentus ou no RI da empresa antes de usar na calculadora de Preço Teto."
+        st.subheader("🎯 Indicadores para o Preço Teto")
+        st.caption(
+            "Os mesmos números que servem de ponto de partida pra calculadora de Fluxo de Caixa Descontado da aba 🎯 Preço Teto. "
+            "O WACC, a taxa de crescimento futura (g1/g2) e a margem de segurança continuam sendo uma decisão sua — "
+            "o Yahoo Finance não fornece isso pronto, só os números abaixo. "
+            "⚠️ Empresas com mais de uma classe de ação (ON/PN/units — ex: Sanepar tem SAPR3/SAPR4/SAPR11) merecem atenção redobrada "
+            "no 'Nº de Ações': buscamos só o dado do TICKER que você tem na carteira, nunca somamos com outra classe por aqui — mas o "
+            "próprio Yahoo Finance às vezes devolve o total da empresa (todas as classes somadas) em vez de só a classe daquele ticker. "
+            "Vale conferir esse número no Fundamentus ou no site de RI da empresa antes de usar na calculadora."
         )
+        _tabela_indicadores_preco_teto_html(lista_ativos, fundamentos)
+
+        with st.expander("ℹ️ O que significa cada indicador"):
+            st.markdown(
+                "- **P/L** (Preço/Lucro): quantos anos de lucro atual seriam necessários para 'pagar' o preço da ação — quanto menor, mais barata a ação em relação ao lucro que gera hoje.\n"
+                "- **P/VP** (Preço/Valor Patrimonial): compara o preço de mercado com o patrimônio líquido por ação — abaixo de 1 pode indicar desconto, mas também pode refletir um negócio de baixa qualidade.\n"
+                "- **Dividend Yield**: proventos pagos nos últimos 12 meses em relação ao preço atual.\n"
+                "- **Payout**: % do lucro líquido dos últimos 12 meses que a empresa distribuiu como proventos — o 'complemento' do Dividend Yield: mostra se ela reparte quase tudo que lucra (payout alto, sobra pouco pra reinvestir e crescer) ou reinveste a maior parte (payout baixo). Vem pronto do Yahoo Finance.\n"
+                "- **Payout (12m calc.)**: o mesmo payout dos últimos 12 meses, só que calculado por aqui a partir das demonstrações trimestrais (dividendos pagos ÷ lucro líquido dos últimos 4 trimestres) — serve de conferência do Payout acima. Pode aparecer '—' quando faltar algum trimestre no histórico do Yahoo Finance (mais comum em empresas da B3 do que dos EUA).\n"
+                "- **ROE** (Retorno sobre o Patrimônio): quanto lucro a empresa gera para cada R$1 de patrimônio líquido — uma das métricas favoritas de investidores de valor para medir a qualidade do negócio.\n"
+                "- **Margem Líquida**: % da receita que sobra como lucro, depois de todos os custos e impostos.\n"
+                "- **Dívida/Patrimônio**: o quanto a empresa depende de dívida em relação ao capital próprio — quanto maior, maior o risco financeiro.\n"
+                "- **Beta**: sensibilidade histórica do preço em relação ao mercado (Ibovespa) — acima de 1 tende a oscilar mais que o mercado, abaixo de 1, menos.\n"
+                "- **FCF Livre (Fluxo de Caixa Livre)**: o caixa que sobra da operação depois dos investimentos necessários pro negócio funcionar — é o ponto de partida ('FCF do último ano') da calculadora de Preço Teto.\n"
+                "- **Dívida Líquida**: dívida total menos o caixa disponível — usada na calculadora de Preço Teto pra ir do valor da empresa inteira ao valor que sobra pro acionista.\n"
+                "- **Nº de Ações**: ações em circulação DO TICKER que você tem — buscamos só o dado dessa listagem específica, nunca somamos com outra classe (ON/PN/units) por aqui. Ainda assim, pra empresas com mais de uma classe (ex: Sanepar: SAPR3/SAPR4/SAPR11), o próprio Yahoo Finance às vezes reporta o total da empresa em vez de só essa classe — vale conferir no Fundamentus ou no RI da empresa antes de usar na calculadora de Preço Teto."
+            )
+
+    with aba_avancada:
+        _secao_analise_avancada(dados, salvar, lista_ativos, fundamentos)
 
 
 def _tabela_fundamentos_html(lista_ativos: list[dict], fundamentos: dict[str, dict]) -> None:
@@ -246,11 +253,10 @@ def _secao_analise_avancada(dados: dict, salvar, lista_ativos: list[dict], funda
     financeiras ANUAIS completas (bem mais pesado que os fundamentos
     básicos usados no resto da aba).
     """
-    st.subheader("🧮 Análise Avançada — Piotroski, Altman e Football Field")
     st.caption(
         "Três leituras adicionais de qualidade e risco financeiro. Piotroski e Altman exigem buscar as "
-        "demonstrações financeiras ANUAIS completas (mais pesado que os fundamentos básicos acima) — por "
-        "isso ficam num botão separado, que não roda automaticamente."
+        "demonstrações financeiras ANUAIS completas (mais pesado que os fundamentos básicos da aba "
+        "Indicadores) — por isso ficam num botão separado, que não roda automaticamente."
     )
 
     if st.button("🔄 Atualizar Análise Avançada (Piotroski/Altman)", use_container_width=True):
@@ -280,7 +286,16 @@ def _secao_analise_avancada(dados: dict, salvar, lista_ativos: list[dict], funda
         else:
             pontos = resultado_salvo["pontos"]
             total = resultado_salvo["totalAvaliado"]
-            st.metric("Pontuação", f"{pontos}/{total}", resultado_salvo["classificacao"])
+            classificacao_piotroski = resultado_salvo["classificacao"]
+            cor_classificacao_piotroski = {
+                "Forte": COR_POSITIVO, "Fraca": COR_NEGATIVO, "Neutra": COR_NEUTRO,
+            }.get(classificacao_piotroski, COR_NEUTRO)
+            render_cards([
+                card_kpi_html(
+                    "Pontuação", f"{pontos}/{total}",
+                    subvalor=classificacao_piotroski, cor_sub=cor_classificacao_piotroski,
+                )
+            ])
             with st.expander("Ver os 9 critérios"):
                 for criterio in resultado_salvo.get("criterios", []):
                     if criterio["passou"] is True:
@@ -298,7 +313,16 @@ def _secao_analise_avancada(dados: dict, salvar, lista_ativos: list[dict], funda
             st.caption("Ainda não buscado para este ativo — clique em \"Atualizar Análise Avançada\" acima.")
         else:
             z = resultado_salvo_altman["zScore"]
-            st.metric("Z-Score", formatar_numero(z, 2) if z is not None else "—", resultado_salvo_altman["classificacao"])
+            classificacao_altman = resultado_salvo_altman["classificacao"]
+            cor_classificacao_altman = {
+                "Zona Segura": COR_POSITIVO, "Zona de Alerta": COR_DESTAQUE, "Zona de Risco": COR_NEGATIVO,
+            }.get(classificacao_altman, COR_NEUTRO)
+            render_cards([
+                card_kpi_html(
+                    "Z-Score", formatar_numero(z, 2) if z is not None else "—",
+                    subvalor=classificacao_altman, cor_sub=cor_classificacao_altman,
+                )
+            ])
             if (ativo_selecionado.get("setor") or "") == "Bancos":
                 st.caption("⚠️ Modelo calibrado para indústria — leitura para bancos costuma não fazer sentido (ver abaixo).")
 

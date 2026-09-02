@@ -1,7 +1,17 @@
 """
 Aba "🧾 Compras & Vendas" — histórico de transações, preço médio ponderado
-por ativo, eventos societários (desdobramento/grupamento/bonificação),
-resultado realizado das vendas e o resumo mensal simplificado de IR.
+por ativo, eventos societários (desdobramento/grupamento/bonificação) e
+resultado realizado das vendas.
+
+Até 2026-09-02 esta aba também mostrava um "Resumo Mensal para Imposto de
+Renda" — removido por ser uma versão SIMPLIFICADA e menos precisa (não
+considerava day trade, prejuízo compensado de meses anteriores nem o
+crédito de IRRF) do mesmo resumo que já existe, completo, na aba
+🏛️ Imposto de Renda (core/imposto_renda.py::resumo_mensal_ir — a própria
+função antiga, core/calculations.py::resumo_ir_mensal, já dizia na
+docstring que foi substituída por essa versão mais completa). Mostrar as
+duas ao mesmo tempo, em abas diferentes, arriscava confundir qual número é
+o "de verdade" — a aba de Imposto de Renda é o lugar certo pra isso.
 """
 
 from __future__ import annotations
@@ -28,30 +38,35 @@ def render(dados: dict, ocultar_valores: bool, salvar) -> None:
     for aviso in ledger.avisos:
         st.warning(aviso)
 
-    st.subheader("Histórico de Transações")
-    _tabela_transacoes(dados, salvar)
+    # Duas sub-abas (2026-09-02, mesma lógica da divisão já feita em
+    # Fundamentos/Imposto de Renda): "o que eu fiz" (transações + preço
+    # médio resultante) separado de "ajustes e resultado" (eventos
+    # societários + vendas realizadas) — reduz a rolagem, já que antes as 4
+    # tabelas ficavam empilhadas verticalmente na mesma tela.
+    aba_transacoes, aba_eventos = st.tabs(["📜 Transações & Preço Médio", "🔀 Eventos & Resultado Realizado"])
 
-    st.subheader("Preço Médio Ponderado por Ativo (posição líquida)")
-    _tabela_consolidado(dados)
+    with aba_transacoes:
+        st.subheader("Histórico de Transações")
+        _tabela_transacoes(dados, salvar)
 
-    st.subheader("🔀 Eventos Societários")
-    st.caption(
-        "Desdobramento, grupamento ou bonificação — ajustam a quantidade e o preço médio "
-        "automaticamente a partir da data informada, sem alterar o custo total investido."
-    )
-    _tabela_eventos(dados, salvar)
+        st.subheader("Preço Médio Ponderado por Ativo (posição líquida)")
+        _tabela_consolidado(dados)
 
-    st.subheader("💰 Resultado Realizado (Vendas)")
-    _tabela_resultado_realizado(ledger.resultados_realizados, ocultar_valores)
+    with aba_eventos:
+        st.subheader("🔀 Eventos Societários")
+        st.caption(
+            "Desdobramento, grupamento ou bonificação — ajustam a quantidade e o preço médio "
+            "automaticamente a partir da data informada, sem alterar o custo total investido."
+        )
+        _tabela_eventos(dados, salvar)
 
-    st.subheader("🧮 Resumo Mensal para Imposto de Renda")
-    st.caption(
-        "Estimativa simplificada para ações comuns no mercado à vista: vendas totais até "
-        "R$ 20.000/mês são isentas de IR; acima disso, o lucro do mês é estimado a 15%. Não "
-        "considera day trade, FIIs, prejuízos de meses anteriores ou outras regras — confirme "
-        "sempre com um contador."
-    )
-    _tabela_resumo_ir(ledger.resultados_realizados, ocultar_valores)
+        st.subheader("💰 Resultado Realizado (Vendas)")
+        _tabela_resultado_realizado(ledger.resultados_realizados, ocultar_valores)
+        if ledger.resultados_realizados:
+            st.caption(
+                "Quer o resumo mensal já pronto pra declarar (Swing Trade x Day Trade, DARF, "
+                "compensação de prejuízo)? Isso está na aba 🏛️ Imposto de Renda."
+            )
 
 
 def _formularios(dados: dict, salvar) -> None:
@@ -252,18 +267,4 @@ def _tabela_resultado_realizado(resultados: list[dict], ocultar_valores: bool) -
         "Preço Venda": formatar_moeda(r["preco_venda"]), "Custo Base": formatar_moeda_priv(r["custo_base"], ocultar_valores),
         "Lucro/Prejuízo": ("+" if r["lucro"] >= 0 else "") + formatar_moeda_priv(r["lucro"], ocultar_valores),
     } for r in ordenados]
-    st.dataframe(pd.DataFrame(linhas), use_container_width=True, hide_index=True)
-
-
-def _tabela_resumo_ir(resultados: list[dict], ocultar_valores: bool) -> None:
-    resumo = calc.resumo_ir_mensal(resultados)
-    if not resumo:
-        st.caption("Nenhuma venda registrada ainda.")
-        return
-    linhas = [{
-        "Mês": r["mes"], "Total Vendido": formatar_moeda_priv(r["total_vendido"], ocultar_valores),
-        "Lucro/Prejuízo": formatar_moeda_priv(r["lucro"], ocultar_valores),
-        "Situação": "✅ Isento (≤ R$ 20.000)" if r["isento"] else "⚠️ Sujeito a IR",
-        "IR Estimado (DARF)": formatar_moeda(r["imposto_estimado"]) if r["imposto_estimado"] > 0 else "—",
-    } for r in resumo]
     st.dataframe(pd.DataFrame(linhas), use_container_width=True, hide_index=True)
