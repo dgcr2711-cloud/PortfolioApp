@@ -1,0 +1,32 @@
+name: Manter o site acordado
+
+# O Streamlit Community Cloud "adormece" o app depois de ~12h sem visitas
+# (ver README_HOSPEDAGEM.md) — quem abrir o link depois disso vê uma tela
+# de "acordar" e espera uns 10-30s na primeira consulta. Este workflow
+# visita o site sozinho, de tempos em tempos (sempre com menos de 12h
+# entre uma visita e outra), só pra ele nunca chegar a "dormir" de
+# verdade — não faz login, não lê nem grava nada da carteira, é só um GET
+# simples na página pública, igual um navegador comum faria.
+#
+# Depende do Secret STREAMLIT_APP_URL (o link do seu dashboard, tipo
+# https://seu-app.streamlit.app) — configure em GitHub -> Settings do
+# repositório -> Secrets and variables -> Actions -> New repository
+# secret, mesmo lugar onde você já configurou o WHATSAPP_ALERTA_NUMERO.
+# Sem esse Secret configurado, o workflow roda e não faz nada (não quebra
+# nem fica "vermelho" no GitHub).
+on:
+  schedule:
+    - cron: "0 */6 * * *"
+  workflow_dispatch: {}  # permite rodar manualmente em Actions -> Manter o site acordado -> Run workflow
+
+jobs:
+  visitar-site:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Visitar o site pra ele não dormir
+        run: |
+          if [ -z "${{ secrets.STREAMLIT_APP_URL }}" ]; then
+            echo "Secret STREAMLIT_APP_URL ainda não configurado — nada a fazer por enquanto."
+            exit 0
+          fi
+          curl -sSL --max-time 60 -o /dev/null -w "Visitei o site, status: %{http_code}\n" "${{ secrets.STREAMLIT_APP_URL }}" || true
