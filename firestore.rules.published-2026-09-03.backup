@@ -7,7 +7,7 @@ service cloud.firestore {
       allow write: if false;
     }
 
-    match /pendencias_compras/{documento} {
+    match /pendencias_compras/{pedidoId} {
       allow create: if request.auth != null
         && request.resource.data.keys().hasOnly(['ticker', 'quantidade', 'precoUnitario', 'tipo', 'criadoEm', 'status'])
         && request.resource.data.ticker is string && request.resource.data.ticker.size() <= 10
@@ -19,7 +19,7 @@ service cloud.firestore {
       allow list, update, delete: if false;
     }
 
-    match /pendencias_remocoes/{documento} {
+    match /pendencias_remocoes/{pedidoId} {
       allow create: if request.auth != null
         && request.resource.data.keys().hasOnly(['compraId', 'criadoEm', 'status'])
         && request.resource.data.compraId is string && request.resource.data.compraId.size() > 0
@@ -28,7 +28,7 @@ service cloud.firestore {
       allow list, update, delete: if false;
     }
 
-    match /pendencias_preco_teto/{documento} {
+    match /pendencias_preco_teto/{pedidoId} {
       allow create: if request.auth != null
         && request.resource.data.keys().hasOnly(['ticker', 'fcfBase', 'g1Pct', 'anos', 'waccPct', 'g2Pct', 'dividaLiquida', 'nAcoes', 'margemPct', 'criadoEm', 'status'])
         && request.resource.data.ticker is string && request.resource.data.ticker.size() <= 10
@@ -45,7 +45,7 @@ service cloud.firestore {
       allow list, update, delete: if false;
     }
 
-    match /pendencias_teses/{documento} {
+    match /pendencias_teses/{pedidoId} {
       allow create: if request.auth != null
         && request.resource.data.keys().hasOnly(['ticker', 'texto', 'criadoEm', 'status'])
         && request.resource.data.ticker is string && request.resource.data.ticker.size() <= 10
