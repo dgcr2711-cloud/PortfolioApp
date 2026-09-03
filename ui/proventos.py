@@ -414,11 +414,30 @@ def _render_watchlist_proximos(watchlist: list[dict], ocultar_valores: bool) -> 
     aqui dentro (o Streamlit não permite expander dentro de expander); um
     divisor + legenda já bastam pra separar visualmente da lista "Carteira"
     acima.
+
+    2026-09-03 (a pedido de Diego): filtro por ação acima da tabela — a
+    watchlist tende a acumular anúncios de várias empresas diferentes ao
+    mesmo tempo, e sem filtro a única forma de achar um ticker específico
+    era rolar a lista inteira. Multiseleção (não um dropdown de escolha
+    única) porque nada impede de querer comparar 2-3 ações ao mesmo tempo;
+    vazio = mostra todas, igual ao comportamento de antes do filtro existir.
     """
-    if watchlist:
-        st.divider()
-        st.caption(f"👀 Watchlist — anunciados pela B3 ({len(watchlist)})")
-        _render_card_proximos("👀 Watchlist", watchlist, ocultar_valores, mostrar_total=False)
+    if not watchlist:
+        return
+
+    st.divider()
+    st.caption(f"👀 Watchlist — anunciados pela B3 ({len(watchlist)})")
+
+    tickers_disponiveis = sorted({item["ticker"] for item in watchlist})
+    tickers_filtrados = st.multiselect(
+        "Filtrar por ação", tickers_disponiveis,
+        placeholder="Todas as ações", key="filtro_tickers_watchlist_proximos",
+    )
+    itens_exibidos = (
+        [item for item in watchlist if item["ticker"] in tickers_filtrados]
+        if tickers_filtrados else watchlist
+    )
+    _render_card_proximos("👀 Watchlist", itens_exibidos, ocultar_valores, mostrar_total=False)
 
 
 def _render_card_proximos(titulo: str, itens: list[dict], ocultar_valores: bool, mostrar_total: bool) -> None:
