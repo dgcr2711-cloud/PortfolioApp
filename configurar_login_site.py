@@ -18,12 +18,23 @@ Como rodar: dê dois cliques em "Configurar Login do Site.bat".
 
 from __future__ import annotations
 
+import datetime
 import getpass
 import json
 import secrets as segredos_aleatorios
+import traceback
 
 from core.auth import CAMINHO_CONFIG_LOGIN
 from core.config import PASTA_SEGREDOS
+
+# 2026-09-03: a janela preta estava fechando sozinha antes de terminar (sem
+# chegar a criar o login_site.json), sem nenhum erro visível pro usuário —
+# provavelmente uma exceção não tratada em algum ponto das perguntas
+# interativas. CAMINHO_LOG_ERRO guarda qualquer erro que aconteça daqui pra
+# frente, e o bloco try/except lá embaixo garante que a janela SEMPRE espera
+# uma tecla antes de fechar, mesmo em caso de erro — nunca mais deve fechar
+# sozinha sem dar chance de ler o que aconteceu.
+CAMINHO_LOG_ERRO = PASTA_SEGREDOS / "erro_configurar_login.txt"
 
 try:
     import streamlit_authenticator as stauth
@@ -136,4 +147,25 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except (KeyboardInterrupt, EOFError):
+        print("\n\nCancelado. Nada foi salvo. Pode fechar esta janela.")
+        input("\nPressione ENTER para fechar...")
+    except Exception:
+        erro_completo = traceback.format_exc()
+        print("\n" + "=" * 60)
+        print(" Deu um erro e o script parou antes de terminar.")
+        print(" Nada foi salvo. Isso NÃO é sua culpa — é um problema")
+        print(" no script, que já ficou registrado para eu corrigir.")
+        print("=" * 60)
+        print()
+        print(erro_completo)
+        try:
+            PASTA_SEGREDOS.mkdir(parents=True, exist_ok=True)
+            with open(CAMINHO_LOG_ERRO, "a", encoding="utf-8") as f:
+                f.write(f"\n\n----- {datetime.datetime.now().isoformat()} -----\n")
+                f.write(erro_completo)
+        except OSError:
+            pass
+        input("\nPressione ENTER para fechar (o Claude já consegue ver esse erro)...")
