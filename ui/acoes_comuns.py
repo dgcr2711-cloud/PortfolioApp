@@ -9,13 +9,13 @@ uma função só evita ter a mesma lógica duplicada em dois arquivos.
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import streamlit as st
 
 from core import altman, b3_publico, calculations as calc, piotroski
 from core import cloud_sync, fundamentals, market_data, notificacoes_whatsapp, setores
-from core.config import INTERVALO_ATUALIZACAO_PROVENTOS_B3_SEGUNDOS
+from core.config import IDADE_ALERTA_COTACAO_HORAS, INTERVALO_ATUALIZACAO_PROVENTOS_B3_SEGUNDOS
 from core.mobile_snapshot import montar_snapshot_para_celular
 from core.pendencias_celular import (
     aplicar_calculos_teto_do_celular,
@@ -358,6 +358,29 @@ def exibir_status_cotacoes() -> None:
         st.warning(st.session_state["status_cotacoes"])
     else:
         st.caption(st.session_state["status_cotacoes"])
+
+
+def exibir_aviso_cotacoes_antigas(dados: dict) -> None:
+    """Sinaliza quando a carteira ainda exibe cotações fora da janela esperada."""
+    agora = datetime.now()
+    antigas: list[tuple[str, datetime]] = []
+    for ticker, cotacao in dados.get("cotacoes", {}).items():
+        valor = cotacao.get("atualizadoEm") if isinstance(cotacao, dict) else None
+        if not valor:
+            continue
+        try:
+            atualizado = datetime.fromisoformat(str(valor).replace("Z", "+00:00")).replace(tzinfo=None)
+        except ValueError:
+            continue
+        if agora - atualizado > timedelta(hours=IDADE_ALERTA_COTACAO_HORAS):
+            antigas.append((ticker, atualizado))
+    if antigas:
+        mais_antiga = min(data for _, data in antigas)
+        st.warning(
+            f"{len(antigas)} cotação(ões) está(ão) desatualizada(s). "
+            f"A mais antiga é de {mais_antiga.strftime('%d/%m/%Y %H:%M')}. "
+            "Os valores antigos não são usados para disparar alertas."
+        )
 
 
 def exibir_status_fundamentos() -> None:

@@ -29,15 +29,10 @@ const configuracaoFirebase = {
 const app = initializeApp(configuracaoFirebase);
 export const db = getFirestore(app);
 
-// Login anônimo (ver src/contexts/AuthContext.tsx) — o Firebase dá ao app
-// uma identidade técnica sem pedir e-mail/senha nenhum, só pra satisfazer a
-// regra "request.auth != null" do Firestore (ver README_MOBILE.md, seção de
-// segurança). `getReactNativePersistence` guarda essa identidade no
-// AsyncStorage do celular, pra não precisar logar de novo a cada abertura
-// do app. `initializeAuth` só pode ser chamado UMA vez por app — o try/catch
-// é só uma defesa contra o modo de desenvolvimento (Fast Refresh do Expo
-// pode reavaliar este arquivo mais de uma vez); no celular de verdade,
-// nunca cai no catch.
+// Login por e-mail/senha (ver src/contexts/AuthContext.tsx). A sessão
+// autenticada fica no AsyncStorage do celular, para não exigir login a cada
+// abertura. `initializeAuth` só pode ser chamado UMA vez por app; o try/catch
+// trata apenas o Fast Refresh do Expo durante o desenvolvimento.
 export const auth = (() => {
   try {
     return initializeAuth(app, { persistence: getReactNativePersistence(AsyncStorage) });

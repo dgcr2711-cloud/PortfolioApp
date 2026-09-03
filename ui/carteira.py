@@ -23,7 +23,7 @@ from core import market_data
 from core import rebalanceamento as rebal
 from core.config import SETORES_PADRAO
 from core.formatting import formatar_moeda_priv, formatar_pct, mascarar_qtd
-from ui.acoes_comuns import atualizar_dados, exibir_status_cotacoes
+from ui.acoes_comuns import atualizar_dados, exibir_aviso_cotacoes_antigas, exibir_status_cotacoes
 from ui.ativos import montar_lista_ativos
 from ui.graficos import grafico_preco_individual
 from ui.styles import badge_alerta, badge_html, badge_indicacao, badge_variacao_dia, card_kpi_html, render_cards
@@ -40,6 +40,7 @@ def render(dados: dict, ocultar_valores: bool, salvar) -> None:
             st.rerun()
 
     exibir_status_cotacoes()
+    exibir_aviso_cotacoes_antigas(dados)
 
     posicoes = calc.calcular_posicoes_completas(dados["compras"], dados["eventos"], dados["cotacoes"])
     totais = calc.totais_carteira(posicoes)

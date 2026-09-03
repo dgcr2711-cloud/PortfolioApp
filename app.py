@@ -37,7 +37,7 @@ from ui import (
     tese_investimento,
     visao_geral,
 )
-from ui.acoes_comuns import atualizar_dados, exibir_status_cotacoes
+from ui.acoes_comuns import atualizar_dados, exibir_aviso_cotacoes_antigas, exibir_status_cotacoes
 from ui.styles import desativar_traducao_automatica, injetar_css
 
 st.set_page_config(page_title="Meu Portfólio B3", page_icon="📊", layout="wide")
@@ -150,6 +150,7 @@ with st.sidebar:
         st.rerun()
 
     exibir_status_cotacoes()
+    exibir_aviso_cotacoes_antigas(dados)
 
     st.divider()
     st.caption("💡 Dica: os dados ficam salvos automaticamente a cada alteração, em data/portfolio_data.json.")

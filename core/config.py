@@ -135,6 +135,9 @@ TICKER_IBOVESPA = "^BVSP"
 # TTL do cache "automático" (segundos). O botão "🔄 Atualizar Dados" ignora
 # esse TTL e força uma busca nova imediatamente.
 CACHE_TTL_COTACAO_SEGUNDOS = 5 * 60      # 5 minutos
+# Uma cotação overnight pode ser normal fora do pregão; acima deste limite,
+# porém, a interface deve deixar claro que o valor não é recente.
+IDADE_ALERTA_COTACAO_HORAS = 30
 CACHE_TTL_NOME_EMPRESA_SEGUNDOS = 24 * 60 * 60  # 24h (nome da empresa não muda)
 CACHE_TTL_FUNDAMENTOS_SEGUNDOS = 24 * 60 * 60   # 24h — P/L, ROE etc. não mudam intradia
 CACHE_TTL_DIVIDENDOS_SEGUNDOS = 24 * 60 * 60    # 24h — data prevista de dividendo não muda intradia
