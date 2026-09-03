@@ -31,6 +31,7 @@ from core.config import ARQUIVO_DADOS, PASTA_BACKUPS, PASTA_DADOS, WATCHLIST_PAD
 # para sempre — 30 dias cobre bem qualquer "percebi tarde demais que apaguei
 # algo por engano" razoável, sem acumular anos de cópias que ninguém abre.
 DIAS_PARA_MANTER_BACKUP_DIARIO = 30
+VERSAO_SCHEMA_DADOS = 1
 
 
 def novo_id() -> str:
@@ -46,6 +47,7 @@ def estrutura_padrao() -> dict[str, Any]:
     padrão vazio — assim arquivos antigos continuam carregando sem erro.
     """
     return {
+        "versaoSchema": VERSAO_SCHEMA_DADOS,
         "compras": [],       # compras E vendas (campo "tipo" em cada item)
         "cotacoes": {},      # ticker -> {preco, nome, fonte, previousClose, atualizadoEm}
         "proventos": [],
@@ -377,4 +379,12 @@ def importar_dados_json(conteudo: str | bytes) -> dict[str, Any]:
     dados_brutos = json.loads(conteudo)
     if not isinstance(dados_brutos, dict):
         raise ValueError("O arquivo não parece ser um backup válido (esperado um objeto JSON).")
+    campos_lista = ("compras", "proventos", "historico", "eventos", "watchlist")
+    campos_dict = ("cotacoes", "alertas", "setores", "precosTeto", "fundamentos", "teses", "piotroski", "altman", "metasAlocacao")
+    for campo in campos_lista:
+        if campo in dados_brutos and not isinstance(dados_brutos[campo], list):
+            raise ValueError(f'O campo "{campo}" precisa ser uma lista.')
+    for campo in campos_dict:
+        if campo in dados_brutos and not isinstance(dados_brutos[campo], dict):
+            raise ValueError(f'O campo "{campo}" precisa ser um objeto.')
     return _mesclar_com_padrao(dados_brutos)

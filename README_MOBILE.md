@@ -6,6 +6,10 @@ Só sobraram **2 comandos pra rodar no seu computador** (não tenho acesso ao te
 
 ## Parte 1 — Ligar o app do PC à nuvem (~1 min)
 
+Publique primeiro as regras versionadas do Firestore, na raiz do projeto:
+`firebase deploy --only firestore:rules`. Alterar o código local não altera
+as regras que já estão publicadas no Console Firebase.
+
 1. Abra um terminal na pasta `PortfolioApp`, ative o ambiente virtual (`venv\Scripts\activate`) e rode:
    ```
    pip install -r requirements-mobile.txt

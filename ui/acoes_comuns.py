@@ -87,7 +87,14 @@ def atualizar_dados(dados: dict, salvar) -> None:
     # contrário é um no-op silencioso, igual à sincronização com o celular
     # acima. (Substituiu o alerta por e-mail em 2026-08-31 — ver
     # core/notificacoes_email.py, mantido no projeto mas sem uso ativo.)
-    cotacao_por_ticker = {a["ticker"]: a["cotacao_atual"] for a in montar_lista_ativos(dados)}
+    # A atualização preserva a última cotação válida para manter a tela útil,
+    # mas alertas só podem usar os tickers que tiveram sucesso nesta rodada.
+    tickers_atualizados = [ticker for ticker in tickers if ticker not in falhas]
+    cotacao_por_ticker = {
+        ticker: dados["cotacoes"][ticker]["preco"]
+        for ticker in tickers_atualizados
+        if ticker in dados["cotacoes"]
+    }
     alertas_notificados_agora = notificacoes_whatsapp.verificar_e_notificar_alertas(dados, cotacao_por_ticker)
 
     salvar(dados)

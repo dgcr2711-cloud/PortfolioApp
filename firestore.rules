@@ -1,0 +1,36 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // O cliente mobile precisa estar autenticado. O SDK Admin usado pelo
+    // dashboard e pelo job de alertas ignora estas regras.
+    match /portfolio/{documento} {
+      allow read: if request.auth != null;
+      allow write: if false;
+    }
+
+    match /pendencias_compras/{documento} {
+      allow create: if request.auth != null;
+      allow get: if request.auth != null;
+      allow list, update, delete: if false;
+    }
+
+    match /pendencias_remocoes/{documento} {
+      allow create: if request.auth != null;
+      allow get: if request.auth != null;
+      allow list, update, delete: if false;
+    }
+
+    match /pendencias_preco_teto/{documento} {
+      allow create: if request.auth != null;
+      allow get: if request.auth != null;
+      allow list, update, delete: if false;
+    }
+
+    match /pendencias_teses/{documento} {
+      allow create: if request.auth != null;
+      allow get: if request.auth != null;
+      allow list, update, delete: if false;
+    }
+  }
+}

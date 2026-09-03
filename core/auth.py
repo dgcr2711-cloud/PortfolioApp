@@ -77,26 +77,33 @@ def _carregar_credenciais_da_nuvem() -> dict[str, Any] | None:
         return None
 
 
+def _login_obrigatorio_configurado() -> bool:
+    """Indica se o app hospedado foi configurado para exigir login."""
+    try:
+        if "login_site" in st.secrets:
+            return True
+        return bool(st.secrets.get("seguranca", {}).get("exigir_login", False))
+    except Exception:
+        return False
+
+
 def exigir_login() -> None:
     """
     Trava a tela até o login ser feito, SE houver configuração de login nos
     Secrets da nuvem. Chame isso bem no início de app.py, logo depois de
     st.set_page_config — antes de carregar ou desenhar qualquer dado real.
     """
-    if stauth is None:
-        # Biblioteca não instalada (venv antigo) — não trava o app por
-        # causa disso; só avisa, pra você saber rodar "Iniciar App.bat" de
-        # novo (ele instala bibliotecas novas sozinho).
-        st.warning(
-            "A biblioteca de login (streamlit-authenticator) ainda não está "
-            "instalada neste ambiente — o site está abrindo sem pedir senha. "
-            "Feche e abra de novo o 'Iniciar App.bat' para instalar."
-        )
+    if not _login_obrigatorio_configurado():
         return
+
+    if stauth is None:
+        st.error("O login obrigatório está configurado, mas a biblioteca de autenticação não está instalada.")
+        st.stop()
 
     credenciais = _carregar_credenciais_da_nuvem()
     if not credenciais:
-        return
+        st.error("O login obrigatório está configurado, mas os Secrets de login estão inválidos ou incompletos.")
+        st.stop()
 
     if "_authenticator" not in st.session_state:
         st.session_state["_authenticator"] = stauth.Authenticate(

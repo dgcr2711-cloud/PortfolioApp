@@ -84,7 +84,13 @@ def main() -> int:
     if falhas:
         print(f"[alertas] Aviso: sem cotação para {', '.join(falhas)} nesta tentativa.")
 
-    cotacao_por_ticker = {a["ticker"]: a["cotacao_atual"] for a in montar_lista_ativos(dados)}
+    # Cotações antigas continuam disponíveis para a tela, mas não são
+    # elegíveis para disparar um alerta nesta execução.
+    cotacao_por_ticker = {
+        ticker: novas_cotacoes[ticker]["preco"]
+        for ticker in tickers
+        if ticker not in falhas and ticker in novas_cotacoes
+    }
     enviados = verificar_e_notificar_alertas(dados, cotacao_por_ticker)
 
     salvar_dados(dados)  # também grava no Firestore, pra manter o PC e os dashboards em dia

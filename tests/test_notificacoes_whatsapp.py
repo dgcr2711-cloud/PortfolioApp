@@ -260,7 +260,12 @@ def test_sem_arquivo_local_usa_configuracao_das_variaveis_de_ambiente():
         assert enviados == 1
         assert dublê.chamadas[0]["numero"] == "+5511777777777"
 
-    _com_variaveis_de_ambiente_whatsapp(_VARS_WHATSAPP_VALIDAS, testar)
+    # Também redireciona o caminho do arquivo local: o teste não pode
+    # depender de credenciais reais existentes na máquina do desenvolvedor.
+    def testar_sem_arquivo_local():
+        _com_variaveis_de_ambiente_whatsapp(_VARS_WHATSAPP_VALIDAS, testar)
+
+    _com_config_whatsapp(None, testar_sem_arquivo_local)
 
 
 def test_sem_arquivo_local_usa_configuracao_dos_secrets_do_streamlit():

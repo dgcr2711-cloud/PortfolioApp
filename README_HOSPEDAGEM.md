@@ -57,6 +57,18 @@ bibliotecas do `requirements.txt` do zero). Quando terminar, você recebe
 um link (algo como `https://SEU-APP.streamlit.app`) — esse é o endereço do
 seu dashboard, acessível de qualquer navegador.
 
+### Segurança antes da publicação
+
+Publique as regras versionadas do Firestore antes de usar o app mobile:
+`firebase deploy --only firestore:rules`, executado na raiz do projeto. O
+arquivo `firebase.json` aponta para `firestore.rules`. As regras exigem login
+para leitura e impedem alterações diretas na carteira pelo cliente mobile.
+
+No app real, mantenha a seção `[login_site]` nos Secrets do Streamlit. Quando
+ela existe, o dashboard interrompe a execução se a biblioteca ou as
+credenciais estiverem ausentes, em vez de abrir sem proteção. O app demo deve
+receber somente `[modo] demo = true`, sem Secrets da carteira.
+
 ## Passo 3 (opcional): um segundo link seguro para compartilhar com amigos
 
 **Novidade (2026-08-30).** O link do Passo 2 mostra sua carteira REAL — não
