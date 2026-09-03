@@ -1,7 +1,14 @@
 """
-Aba "🏠 Visão Geral" — resumo de todos os recursos numa tela só (mesmos 5
-cards e a mesma tabela compacta com posições + empresas-alvo do dashboard
-original).
+Aba "🏠 Visão Geral" — resumo de todos os recursos numa tela só: os 5 cards
+de KPI, os 2 gráficos (Alocação + Evolução Patrimonial) e a tabela
+compacta com posições + empresas-alvo do dashboard original.
+
+2026-09-03 (refinamento estético, pedido do Diego — "estética minimalista,
+divulgação progressiva"): o Painel de Diagnóstico e a tabela completa de
+ativos — os dois blocos mais densos da tela — passaram a viver dentro de
+`st.expander`, recolhidos por padrão. Cards + gráficos continuam sempre
+visíveis (é o "essencial de bater o olho"); o resto fica a um clique de
+distância, sem sumir de vez.
 """
 
 from __future__ import annotations
@@ -79,10 +86,20 @@ def render(dados: dict, ocultar_valores: bool) -> None:
 
     _render_graficos_resumo(dados, posicoes)
 
-    _render_diagnostico_carteira(dados, posicoes)
+    # Os dois blocos mais densos da tela — diagnóstico avançado e a tabela
+    # completa de ativos — ficam recolhidos por padrão (2026-09-03,
+    # "divulgação progressiva"): quem só quer bater o olho no patrimônio e
+    # nos gráficos não precisa rolar a tela toda pra chegar lá embaixo, mas
+    # nada foi removido — é só um clique de distância.
+    if posicoes:
+        with st.expander("🏛️ Diagnóstico da Carteira (concentração, setores, CAGR, fundamentos)"):
+            _render_diagnostico_carteira(dados, posicoes)
 
-    st.subheader("Todos os ativos (posições + alvo)")
+    with st.expander(f"📋 Todos os ativos — posições + alvo ({len(lista_ativos)})"):
+        _render_tabela_ativos(lista_ativos)
 
+
+def _render_tabela_ativos(lista_ativos: list[dict]) -> None:
     if not lista_ativos:
         st.info("Nenhum ativo ainda — registre uma compra ou adicione uma empresa alvo na aba Carteira.")
         return
@@ -152,7 +169,7 @@ def _render_graficos_resumo(dados: dict, posicoes: list[dict]) -> None:
                 fig = grafico_alocacao(
                     [p["ticker"] for p in posicoes_com_valor],
                     [p["atual"] for p in posicoes_com_valor],
-                    altura=260,
+                    altura=300,
                 )
                 st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
 
@@ -178,7 +195,6 @@ def _render_diagnostico_carteira(dados: dict, posicoes: list[dict]) -> None:
     if not posicoes:
         return
 
-    st.subheader("🏛️ Diagnóstico da Carteira")
     st.caption("Leitura em nível de carteira — a mesma análise de concentração e qualidade que um gestor institucional faria antes de olhar ativo por ativo.")
 
     col_esq, col_dir = st.columns(2)

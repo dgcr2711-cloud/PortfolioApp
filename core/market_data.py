@@ -32,6 +32,7 @@ from core.config import (
     CACHE_TTL_COTACAO_SEGUNDOS,
     CACHE_TTL_DIVIDENDOS_SEGUNDOS,
     CACHE_TTL_FALHA_HGBRASIL_SEGUNDOS,
+    CACHE_TTL_HISTORICO_PRECO_SEGUNDOS,
     CACHE_TTL_NOME_EMPRESA_SEGUNDOS,
     CACHE_TTL_TAXAS_HGBRASIL_SEGUNDOS,
     CAMINHO_CHAVE_HGBRASIL,
@@ -219,6 +220,66 @@ def buscar_cotacao_ibovespa() -> float | None:
     """Busca o valor atual do Ibovespa (usado no comparativo da aba Evolução)."""
     info = _buscar_preco_yahoo(TICKER_IBOVESPA)
     return info["preco"] if info else None
+
+
+PERIODOS_HISTORICO_PRECO = {"1 mês": "1mo", "6 meses": "6mo", "1 ano": "1y", "5 anos": "5y"}
+
+
+def _pontos_de_historico_yahoo(historico: Any) -> list[dict[str, Any]]:
+    """
+    Parte "pura" de `buscar_historico_preco`: converte o DataFrame que
+    `yf.Ticker(...).history(...)` devolve numa lista simples de
+    {"data": "AAAA-MM-DD", "fechamento": float}, na ordem cronológica —
+    separado da chamada de rede em si (que não tem lógica própria pra
+    testar isoladamente, mesmo motivo de _buscar_preco_yahoo não ser
+    testada diretamente — ver docstring de tests/test_market_data.py)
+    justamente para que ESTA conversão possa ser testada com um objeto
+    falso simples, sem precisar da rede nem do pandas de verdade.
+
+    Ignora silenciosamente qualquer linha sem um fechamento numérico
+    válido (mesmo critério de numero_valido usado no resto do módulo) —
+    um NaN esporádico do Yahoo não pode quebrar o gráfico inteiro.
+    """
+    if historico.empty:
+        return []
+    return [
+        {"data": indice.strftime("%Y-%m-%d"), "fechamento": fechamento}
+        for indice, fechamento in zip(historico.index, historico["Close"].tolist())
+        if numero_valido(fechamento) is not None
+    ]
+
+
+@st.cache_data(ttl=CACHE_TTL_HISTORICO_PRECO_SEGUNDOS, show_spinner=False)
+def buscar_historico_preco(ticker: str, periodo: str = "6mo") -> list[dict[str, Any]] | None:
+    """
+    Série diária de fechamento de UM ativo (usado no gráfico individual da
+    aba Carteira, 2026-09-03 — substitui o donut de alocação que antes
+    ficava ali, agora exclusivo da Visão Geral). `periodo` é o código que o
+    yfinance já entende direto ("1mo", "6mo", "1y", "5y" — ver
+    PERIODOS_HISTORICO_PRECO para os rótulos em português mostrados na
+    tela).
+
+    Mesma lógica de retry de _buscar_preco_yahoo (o Yahoo Finance
+    ocasionalmente recusa uma consulta em rajada) — mas SEM tentar
+    `fast_info` primeiro, porque aqui o que interessa é a série toda, não
+    só o último preço.
+
+    Retorna None se não encontrar nenhum fechamento válido (ticker
+    inexistente na B3, ou falha de rede persistente); nunca uma lista
+    vazia — quem chama só precisa checar "is None" para saber se deu erro.
+    """
+    symbolo = f"{ticker}{SUFIXO_B3}"
+    for tentativa in range(1, _TENTATIVAS_POR_TICKER + 1):
+        try:
+            historico = yf.Ticker(symbolo).history(period=periodo, interval="1d")
+            pontos = _pontos_de_historico_yahoo(historico)
+            if pontos:
+                return pontos
+        except Exception:
+            pass
+        if tentativa < _TENTATIVAS_POR_TICKER:
+            time.sleep(_PAUSA_ENTRE_TENTATIVAS_SEGUNDOS)
+    return None
 
 
 def atualizar_cotacoes(tickers: list[str], cotacoes_atuais: dict[str, dict]) -> tuple[dict[str, dict], list[str]]:

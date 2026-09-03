@@ -57,7 +57,7 @@ export function GraficoAlocacao({ dados }: { dados: FatiaAlocacao[] }) {
           <View key={item.rotulo} style={estilos.linhaLegenda}>
             <View style={[estilos.marcador, { backgroundColor: PALETA_ALOCACAO[indice % PALETA_ALOCACAO.length] }]} />
             <Text style={estilos.rotuloLegenda} numberOfLines={1}>
-              {item.rotulo}
+              {item.rotulo} -
             </Text>
             <Text style={estilos.valorLegenda}>{formatarPct((item.valor / total) * 100)}</Text>
           </View>

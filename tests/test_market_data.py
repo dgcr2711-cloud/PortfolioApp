@@ -507,3 +507,69 @@ def test_buscar_cotacoes_hgbrasil_usa_cache_no_mesmo_conjunto_de_tickers():
     finally:
         market_data._obter_chave_hgbrasil = chave_original
         requests.get = get_original
+
+
+# ==========================================================================
+# _pontos_de_historico_yahoo (2026-09-03 — gráfico individual por ativo,
+# aba Carteira). A busca de verdade (buscar_historico_preco) chama
+# yf.Ticker(...).history(...), que depende inteiramente da rede — mesmo
+# motivo de _buscar_preco_yahoo não ser testada diretamente (ver docstring
+# no topo deste arquivo). Só a CONVERSÃO do resultado (DataFrame -> lista
+# de pontos) tem lógica própria, então é ela que é testada aqui, com um
+# objeto falso simples no lugar do DataFrame do pandas (sem precisar do
+# pandas de verdade nem da rede).
+# ==========================================================================
+
+class _ColunaFalsa:
+    def __init__(self, valores):
+        self._valores = valores
+
+    def tolist(self):
+        return self._valores
+
+
+class _HistoricoYahooFalso:
+    """Dublê de um DataFrame do pandas — só o suficiente que
+    _pontos_de_historico_yahoo usa: `.empty`, `.index` (iterável de objetos
+    com `.strftime`, como `datetime.date` de verdade) e `["Close"].tolist()`."""
+
+    def __init__(self, indices, fechamentos):
+        self.empty = len(indices) == 0
+        self.index = indices
+        self._fechamentos = fechamentos
+
+    def __getitem__(self, nome):
+        assert nome == "Close"
+        return _ColunaFalsa(self._fechamentos)
+
+
+def test_pontos_de_historico_yahoo_caminho_feliz():
+    historico = _HistoricoYahooFalso(
+        [date(2026, 8, 1), date(2026, 8, 2), date(2026, 8, 3)],
+        [30.0, 30.5, 31.2],
+    )
+    pontos = market_data._pontos_de_historico_yahoo(historico)
+    assert pontos == [
+        {"data": "2026-08-01", "fechamento": 30.0},
+        {"data": "2026-08-02", "fechamento": 30.5},
+        {"data": "2026-08-03", "fechamento": 31.2},
+    ]
+
+
+def test_pontos_de_historico_yahoo_ignora_fechamento_invalido():
+    """Um NaN esporádico do Yahoo (comum no primeiro pregão do período, ou
+    num feriado que ainda entra no índice) não pode quebrar o gráfico
+    inteiro — a linha é descartada, o resto continua normal."""
+    historico = _HistoricoYahooFalso(
+        [date(2026, 8, 1), date(2026, 8, 2), date(2026, 8, 3)],
+        [30.0, float("nan"), 31.2],
+    )
+    pontos = market_data._pontos_de_historico_yahoo(historico)
+    assert pontos == [
+        {"data": "2026-08-01", "fechamento": 30.0},
+        {"data": "2026-08-03", "fechamento": 31.2},
+    ]
+
+
+def test_pontos_de_historico_yahoo_vazio_devolve_lista_vazia():
+    assert market_data._pontos_de_historico_yahoo(_HistoricoYahooFalso([], [])) == []

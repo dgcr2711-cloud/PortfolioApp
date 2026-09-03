@@ -1,7 +1,17 @@
 """
 Aba "📈 Carteira" — cards de resumo, tabela detalhada de posições (com
-Preço Teto/Margem/Indicação) + empresas-alvo, e o gráfico de alocação
-(por ativo ou por setor), igual ao dashboard original.
+Preço Teto/Margem/Indicação) + empresas-alvo, e o gráfico individual de UM
+ativo por vez (histórico de fechamento + preço-teto de referência).
+
+2026-09-03 (refinamento estético, pedido do Diego — "estética minimalista,
+padrão TradeMap"): o donut de Alocação que vivia aqui foi removido —
+mostrar o mesmo gráfico consolidado em duas telas (aqui e na Visão Geral)
+era redundante, então ele passou a existir só na Visão Geral (ver
+`ui/visao_geral.py`). No lugar, esta aba ganhou o gráfico "de um ativo só":
+o usuário escolhe um ticker da lista e vê um gráfico limpo (linha de
+fechamento, com o preço-teto como referência) só daquele ativo — menos
+informação simultânea na tela, sem perder a possibilidade de olhar cada
+ativo de perto.
 """
 
 from __future__ import annotations
@@ -9,12 +19,13 @@ from __future__ import annotations
 import streamlit as st
 
 from core import calculations as calc
+from core import market_data
 from core import rebalanceamento as rebal
 from core.config import SETORES_PADRAO
 from core.formatting import formatar_moeda_priv, formatar_pct, mascarar_qtd
 from ui.acoes_comuns import atualizar_dados, exibir_status_cotacoes
 from ui.ativos import montar_lista_ativos
-from ui.graficos import grafico_alocacao
+from ui.graficos import grafico_preco_individual
 from ui.styles import badge_alerta, badge_html, badge_indicacao, badge_variacao_dia, card_kpi_html, render_cards
 
 
@@ -51,20 +62,21 @@ def render(dados: dict, ocultar_valores: bool, salvar) -> None:
 
     # Duas sub-abas (2026-09-02, mesma lógica da divisão já feita em
     # Fundamentos/Imposto de Renda/Compras): "o que eu tenho" (posições +
-    # alocação) separado de "pra onde eu quero ir" (metas + rebalanceamento)
-    # — antes a seção de metas ficava sempre visível, empilhada embaixo da
-    # tabela de posições, obrigando a rolar mesmo pra quem só queria ver a
-    # carteira atual.
-    aba_posicoes, aba_metas = st.tabs(["📌 Posições & Alocação", "🎯 Metas & Rebalanceamento"])
+    # gráfico do ativo) separado de "pra onde eu quero ir" (metas +
+    # rebalanceamento) — antes a seção de metas ficava sempre visível,
+    # empilhada embaixo da tabela de posições, obrigando a rolar mesmo pra
+    # quem só queria ver a carteira atual.
+    aba_posicoes, aba_metas = st.tabs(["📌 Posições & Gráfico do Ativo", "🎯 Metas & Rebalanceamento"])
 
     with aba_posicoes:
-        _aba_posicoes_e_alocacao(dados, ocultar_valores, posicoes, salvar)
+        _aba_posicoes_e_grafico(dados, ocultar_valores, posicoes, salvar)
 
     with aba_metas:
         _secao_rebalanceamento(dados, ocultar_valores, posicoes, salvar)
 
 
-def _aba_posicoes_e_alocacao(dados: dict, ocultar_valores: bool, posicoes: list[dict], salvar) -> None:
+def _aba_posicoes_e_grafico(dados: dict, ocultar_valores: bool, posicoes: list[dict], salvar) -> None:
+    lista_ativos = montar_lista_ativos(dados)
     col_tabela, col_grafico = st.columns([2, 1])
 
     with col_tabela:
@@ -84,7 +96,6 @@ def _aba_posicoes_e_alocacao(dados: dict, ocultar_valores: bool, posicoes: list[
                     salvar(dados)
                     st.rerun()
 
-        lista_ativos = montar_lista_ativos(dados)
         if not lista_ativos:
             st.info('Nenhuma posição ainda. Vá até a aba "🧾 Compras & Vendas" e registre sua primeira compra.')
         else:
@@ -93,28 +104,7 @@ def _aba_posicoes_e_alocacao(dados: dict, ocultar_valores: bool, posicoes: list[
             _lista_remover_ativo(lista_ativos, dados, salvar)
 
     with col_grafico:
-        st.subheader("Alocação")
-        # st.container(border=True) em vez de deixar o gráfico solto: a
-        # mesma moldura em cartão da tabela de posições ao lado, pra não
-        # ficar "flutuando" sem contorno nenhum no fundo escuro da página
-        # (2026-09-02, mesma lógica do .card-tabela em ui/styles.py — aqui
-        # é um componente nativo do Streamlit, não HTML manual, então usa o
-        # container nativo com borda em vez da classe CSS).
-        with st.container(border=True):
-            agrupar_por = st.radio("Agrupar por", ["Ativo", "Setor"], horizontal=True, label_visibility="collapsed")
-            posicoes_com_valor = [p for p in posicoes if p["atual"] > 0]
-            if not posicoes_com_valor:
-                st.caption("Sem posições para exibir no gráfico ainda.")
-            elif agrupar_por == "Ativo":
-                fig = grafico_alocacao([p["ticker"] for p in posicoes_com_valor], [p["atual"] for p in posicoes_com_valor])
-                st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
-            else:
-                por_setor: dict[str, float] = {}
-                for p in posicoes_com_valor:
-                    setor = dados["setores"].get(p["ticker"], "Sem setor definido")
-                    por_setor[setor] = por_setor.get(setor, 0) + p["atual"]
-                fig = grafico_alocacao(list(por_setor.keys()), list(por_setor.values()))
-                st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+        _secao_grafico_individual(lista_ativos)
 
     with st.expander("⚙️ Definir setor de um ativo"):
         tickers_disponiveis = [p["ticker"] for p in posicoes]
@@ -132,6 +122,44 @@ def _aba_posicoes_e_alocacao(dados: dict, ocultar_valores: bool, posicoes: list[
                 st.rerun()
         else:
             st.caption("Registre uma compra primeiro para poder classificar por setor.")
+
+
+def _secao_grafico_individual(lista_ativos: list[dict]) -> None:
+    """
+    Gráfico de UM ativo por vez (2026-09-03, pedido do Diego): escolhe um
+    ticker (posição real ou empresa-alvo — o histórico de preço funciona
+    pros dois) e mostra o fechamento diário num período, com o preço-teto
+    (já com a margem de segurança) como linha de referência quando
+    disponível. Busca direto no Yahoo Finance via
+    `core.market_data.buscar_historico_preco` (cacheado por 1h — ver
+    CACHE_TTL_HISTORICO_PRECO_SEGUNDOS em core/config.py).
+    """
+    st.subheader("Gráfico do Ativo")
+    with st.container(border=True):
+        if not lista_ativos:
+            st.caption("Registre uma posição ou adicione uma empresa-alvo para ver o gráfico.")
+            return
+
+        tickers = [a["ticker"] for a in lista_ativos]
+        ticker_escolhido = st.selectbox("Ativo", tickers, key="sel_ticker_grafico_individual")
+        rotulos_periodo = list(market_data.PERIODOS_HISTORICO_PRECO.keys())
+        periodo_rotulo = st.radio(
+            "Período", rotulos_periodo, index=rotulos_periodo.index("6 meses"),
+            horizontal=True, key="periodo_grafico_individual",
+        )
+        periodo_codigo = market_data.PERIODOS_HISTORICO_PRECO[periodo_rotulo]
+
+        with st.spinner(f"Buscando histórico de {ticker_escolhido}..."):
+            pontos = market_data.buscar_historico_preco(ticker_escolhido, periodo_codigo)
+
+        if not pontos:
+            st.caption(f"Não foi possível buscar o histórico de {ticker_escolhido} agora — tente novamente mais tarde.")
+            return
+
+        ativo = next(a for a in lista_ativos if a["ticker"] == ticker_escolhido)
+        fig = grafico_preco_individual(pontos, preco_teto_com_margem=ativo.get("preco_teto_com_margem"))
+        st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+        st.caption("Fonte: Yahoo Finance — fechamento diário.")
 
 
 def _secao_rebalanceamento(dados: dict, ocultar_valores: bool, posicoes: list[dict], salvar) -> None:

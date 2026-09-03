@@ -138,6 +138,12 @@ CACHE_TTL_COTACAO_SEGUNDOS = 5 * 60      # 5 minutos
 CACHE_TTL_NOME_EMPRESA_SEGUNDOS = 24 * 60 * 60  # 24h (nome da empresa não muda)
 CACHE_TTL_FUNDAMENTOS_SEGUNDOS = 24 * 60 * 60   # 24h — P/L, ROE etc. não mudam intradia
 CACHE_TTL_DIVIDENDOS_SEGUNDOS = 24 * 60 * 60    # 24h — data prevista de dividendo não muda intradia
+# Histórico diário de preço por ativo (gráfico individual da aba Carteira,
+# 2026-09-03) — mais generoso que o TTL de cotação porque é uma série de
+# fechamentos diários (o preço de HOJE, se o pregão ainda está aberto, já
+# vem coberto por "cotacoes"/CACHE_TTL_COTACAO_SEGUNDOS de qualquer forma;
+# aqui é só o pano de fundo histórico do gráfico).
+CACHE_TTL_HISTORICO_PRECO_SEGUNDOS = 60 * 60    # 1h
 
 # ----------------------------------------------------------------------
 # HG Brasil Finance (2026-09-03) — API paga por chave, usada como (1) fonte

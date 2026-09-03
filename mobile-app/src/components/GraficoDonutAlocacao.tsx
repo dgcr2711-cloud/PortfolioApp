@@ -93,8 +93,10 @@ export function GraficoDonutAlocacao({
         {ordenados.map((item, indice) => (
           <View key={item.rotulo} style={estilos.linhaLegenda}>
             <View style={[estilos.marcador, { backgroundColor: PALETA_ALOCACAO[indice % PALETA_ALOCACAO.length] }]} />
+            {/* Formato "TICKER - XX,X%" (pedido do Diego, 2026-09-03) — o
+                mesmo padrão usado no donut do site (ui/graficos.py). */}
             <Text style={estilos.rotuloLegenda} numberOfLines={1}>
-              {item.rotulo}
+              {item.rotulo} -
             </Text>
             <Text style={estilos.valorLegenda}>{formatarPct((item.valor / total) * 100)}</Text>
           </View>
