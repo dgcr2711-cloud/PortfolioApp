@@ -18,21 +18,38 @@ from core.config import COR_DESTAQUE, COR_FUNDO_CARD, COR_INFO, COR_NEGATIVO, CO
 
 CSS_GLOBAL = f"""
 <style>
+/* Aproveitamento de espaço (2026-09-03, pedido do Diego: "otimização" dos
+   espaços vazios, tudo cabendo melhor numa tela de notebook). O Streamlit
+   por padrão reserva bastante respiro no topo da página e entre cada
+   bloco (título, gráfico, tabela...) — pensado pra apps genéricos, não pra
+   um dashboard denso como este. As regras abaixo comprimem esse respiro
+   SEM mudar a largura útil (layout="wide" continua controlando isso em
+   app.py) — só a altura ocupada por espaço vazio diminui. */
+.block-container {{
+    padding-top: 2rem !important;
+    padding-bottom: 2.5rem !important;
+}}
+div[data-testid="stVerticalBlock"] {{ gap: 0.6rem; }}
+h1 {{ font-size: 1.65rem !important; margin: 0 0 0.15rem 0 !important; padding-top: 0 !important; }}
+h2 {{ font-size: 1.25rem !important; margin: 0.3rem 0 0.2rem 0 !important; }}
+h3 {{ font-size: 1.1rem !important; margin: 0.3rem 0 0.2rem 0 !important; }}
+div[data-testid="stCaptionContainer"] {{ margin-bottom: 0.1rem !important; }}
+
 /* Cards de resumo (KPIs) — mesmo visual do dashboard original, com um
    acabamento "institucional": borda sutil em degradê, leve sombra e uma
    barra superior fina que assume a cor do indicador quando informada
    (COR_DESTAQUE nas leituras mais importantes para o value investing). */
 .grid-cards {{
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-    gap: 1rem;
-    margin-bottom: 1.5rem;
+    grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+    gap: 0.75rem;
+    margin-bottom: 1rem;
 }}
 .card-kpi {{
     background: linear-gradient(180deg, {COR_FUNDO_CARD} 0%, #182230 100%);
     border: 1px solid #313d4f;
     border-radius: 0.85rem;
-    padding: 1rem 1.25rem;
+    padding: 0.8rem 1.1rem;
     box-shadow: 0 1px 2px rgba(0,0,0,0.25);
     position: relative;
     overflow: hidden;
@@ -47,10 +64,10 @@ CSS_GLOBAL = f"""
     text-transform: uppercase; letter-spacing: 0.05em;
 }}
 .card-kpi .valor {{
-    font-size: 1.4rem; font-weight: 700; color: #ffffff; margin-top: 0.25rem;
+    font-size: 1.25rem; font-weight: 700; color: #ffffff; margin-top: 0.2rem;
     font-variant-numeric: tabular-nums;
 }}
-.card-kpi .subvalor {{ font-size: 12px; font-weight: 500; margin-top: 0.15rem; }}
+.card-kpi .subvalor {{ font-size: 12px; font-weight: 500; margin-top: 0.1rem; }}
 
 /* Badges (pílulas coloridas) — mesmas classes/cores do HTML original */
 .badge {{
@@ -79,7 +96,7 @@ CSS_GLOBAL = f"""
 .card-tabela {{
     background: {COR_FUNDO_CARD}; border: 1px solid #313d4f; border-radius: 0.85rem;
     padding: 0.35rem 0.85rem; box-shadow: 0 1px 2px rgba(0,0,0,0.25);
-    overflow-x: auto; margin-bottom: 1rem;
+    overflow-x: auto; margin-bottom: 0.75rem;
 }}
 .card-tabela table {{ margin: 0; }}
 
@@ -107,16 +124,16 @@ table.tabela-carteira .subcelula {{ font-size: 11px; color: #9ca3af; margin-top:
     background: linear-gradient(135deg, #1a2233 0%, #161d2b 100%);
     border: 1px solid rgba(212,175,55,0.25);
     border-radius: 0.85rem;
-    padding: 1.1rem 1.35rem;
-    margin-bottom: 1rem;
+    padding: 0.85rem 1.1rem;
+    margin-bottom: 0.75rem;
 }}
 .painel-diagnostico h4 {{
-    margin: 0 0 0.6rem 0; font-size: 13px; font-weight: 700; letter-spacing: 0.04em;
+    margin: 0 0 0.45rem 0 !important; font-size: 13px; font-weight: 700; letter-spacing: 0.04em;
     text-transform: uppercase; color: {COR_DESTAQUE};
 }}
 .linha-diagnostico {{
     display: flex; justify-content: space-between; align-items: baseline;
-    padding: 0.35rem 0; border-bottom: 1px dashed rgba(255,255,255,0.06);
+    padding: 0.28rem 0; border-bottom: 1px dashed rgba(255,255,255,0.06);
     font-size: 13px;
 }}
 .linha-diagnostico:last-child {{ border-bottom: none; }}

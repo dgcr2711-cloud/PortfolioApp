@@ -36,7 +36,7 @@ if errorlevel 1 (
     echo Instalando a biblioteca de login do site, aguarde...
     echo (normalmente leva menos de 1 minuto)
     echo.
-    pip install streamlit-authenticator>=0.4
+    pip install "streamlit-authenticator>=0.4"
     if errorlevel 1 (
         echo.
         echo Nao foi possivel instalar a biblioteca de login. Copie todo o
