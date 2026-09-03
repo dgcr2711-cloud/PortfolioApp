@@ -18,7 +18,7 @@ import streamlit as st
 from core import calculations as calc
 from core import portfolio_analytics as analytics
 from core.config import COR_DESTAQUE, COR_NEGATIVO, COR_NEUTRO, COR_POSITIVO
-from core.formatting import formatar_moeda, formatar_moeda_priv, formatar_numero, formatar_pct
+from core.formatting import formatar_moeda_priv, formatar_numero, formatar_pct
 from ui.ativos import montar_lista_ativos
 from ui.graficos import grafico_alocacao, grafico_evolucao_patrimonial
 from ui.styles import (
@@ -215,11 +215,14 @@ def _render_graficos_resumo(dados: dict, posicoes: list[dict], ocultar_valores: 
                     altura=300,
                     valor_central=formatar_moeda_priv(sum(valores_donut), ocultar_valores),
                     rotulo_central="Patrimônio",
-                    # R$ por fatia (2026-09-03, pesquisa de dashboards de
-                    # investimento reais): só quando os valores não estão
-                    # ocultos — no modo privado, cai pro comportamento de
-                    # antes (só ticker + %), sem vazar nenhum valor.
-                    valores_formatados=None if ocultar_valores else [formatar_moeda(v) for v in valores_donut],
+                    # 2026-09-03: o R$ por fatia (rótulo de fora do donut) foi
+                    # tentado numa rodada anterior por pesquisa de dashboards
+                    # de investimento, mas Diego viu ao vivo e achou
+                    # desnecessário/poluído — o total em R$ já aparece bem no
+                    # centro da rosca, então as fatias voltam a mostrar só
+                    # "TICKER - XX,X%" (comportamento de antes desta rodada).
+                    # `valores_formatados` continua existindo em
+                    # `grafico_alocacao` caso outra tela queira usá-lo.
                 )
                 st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
 

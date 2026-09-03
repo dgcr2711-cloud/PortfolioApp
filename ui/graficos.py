@@ -59,6 +59,42 @@ mexer em qualquer coisa. Mudanças que vieram direto dessa pesquisa:
      translúcida, no espírito do "hairline ring" que o skill de dataviz
      recomenda pra modo escuro) em vez da linha sólida mais grossa de
      antes.
+
+2026-09-03 (correção de bug visual, mesmo dia — Diego reportou por print de
+tela que "este gráfico ficou péssimo, estava melhor antes"): duas correções
+nos gráficos de linha e no donut:
+  1. **Removida a `_borda_grafico()`** (o retângulo em `layout.shapes` do
+     item 3 acima) — ela ficava DUPLICADA em cima da borda que o
+     `st.container(border=True)` do Streamlit já desenha em toda chamada
+     destes gráficos (`ui/visao_geral.py` e `ui/carteira.py`), resultando
+     no "quadrado dentro de quadrado" que apareceu no print. A borda do
+     container do Streamlit sozinha já é suficiente.
+  2. **Range explícito no eixo Y** (`_intervalo_eixo_y`) nos dois gráficos
+     de linha — sem isso, o `fill="tozeroy"` (preenchimento sutil "até o
+     zero" sob a linha) combinado com um eixo Y que também autoajusta perto
+     do zero fazia o preenchimento cobrir o painel inteiro, virando um
+     bloco de cor sólida em vez do degradê fino pretendido (era o
+     "gráfico verde péssimo" do print). Agora o eixo Y fica limitado a uma
+     faixa próxima do mínimo/máximo real dos dados (com uma margem de
+     respiro), então o preenchimento "até o zero" continua matematicamente
+     indo até zero mas fica visualmente cortado fora da área visível.
+
+2026-09-03 (2ª correção de bug visual, mesmo dia — novo print do Diego
+mostrando uma linha ondulada/estranha embaixo do gráfico de Evolução
+Patrimonial, no espaço entre a linha "Total Investido" e o eixo X):
+consequência direta da correção #2 acima — como o eixo Y passou a ter um
+range que NÃO inclui mais o zero (de propósito, pra cortar o preenchimento
+"até o zero" fora da área visível), o preenchimento `fill="tozeroy"`
+precisa ser recortado (clipped) contra essa borda inferior do eixo, e esse
+recorte estava saindo ondulado/mal-desenhado na renderização — em vez de
+uma borda reta. Correção: **removido o preenchimento (`fill`/`fillcolor`)
+dos dois gráficos de linha por completo** — voltam a ser só a linha, sem
+área sombreada embaixo. Além de eliminar o artefato, é a abordagem mais
+robusta (nenhuma combinação de range de eixo Y pode voltar a quebrar o
+preenchimento, porque não existe mais preenchimento) e é o padrão visual
+mais comum em apps de investimento de verdade (StatusInvest, TradingView
+no modo "linha") quando o gráfico já está bem ajustado (zoom) na faixa de
+valores reais.
 """
 
 from __future__ import annotations
@@ -83,12 +119,6 @@ PALETA_ALOCACAO = ["#3987e5", "#d95926", "#199e70", "#c98500", "#d55181", "#0083
 COR_LINHA_ATIVO = "#38bdf8"
 COR_PRECO_TETO = "#fbbf24"
 
-# "Anel" bem sutil ao redor dos gráficos (2026-09-03, 2ª versão — linha
-# fina translúcida em vez da cor sólida de antes), no espírito do
-# "hairline ring" que o skill de dataviz recomenda como moldura de cartão
-# em modo escuro.
-_COR_BORDA_GRAFICO = "rgba(255,255,255,0.12)"
-
 # Cor dos eixos/grade dos gráficos de linha — mesmo tom "texto secundário"
 # usado no resto do app (ui/styles.py), pra eixo/grade ficarem discretos e
 # consistentes com rótulos e legendas fora do gráfico.
@@ -96,18 +126,39 @@ _COR_EIXO = COR_TEXTO_SECUNDARIO
 _COR_GRADE = "rgba(161,161,170,0.12)"
 
 
-def _borda_grafico() -> dict:
+def _intervalo_eixo_y(*series: list[float], margem_pct: float = 0.08) -> list[float]:
     """
-    Retângulo fino ao redor do gráfico inteiro (canto a canto do "papel"
-    do Plotly) — a forma de dar um "borda" a um gráfico Plotly sem
-    depender do container do Streamlit (que só tem uma borda genérica,
-    igual em todo o app, e nem sempre está presente onde o gráfico é
-    usado). Reaproveitado pelos 3 gráficos deste módulo.
+    Range explícito pro eixo Y, com uma margem de "respiro" acima/abaixo do
+    mínimo/máximo real dos dados (2026-09-03, correção do bug do "gráfico
+    verde sólido" reportado pelo Diego).
+
+    Por quê: as linhas de `grafico_evolucao_patrimonial` e
+    `grafico_preco_individual` usam `fill="tozeroy"` (preenchimento sutil
+    "até o zero" sob a linha, pra dar profundidade). Sem um range de eixo Y
+    explícito, o Plotly autoajusta o eixo também partindo de perto do zero
+    — mas como os valores reais (ex.: patrimônio ~R$ 700 mil) estão muito
+    longe de zero, o preenchimento "até o zero" acaba cobrindo quase o
+    gráfico inteiro, virando um bloco de cor sólida em vez de um degradê
+    fino. Dando ao eixo um range próximo do mínimo/máximo real, o
+    preenchimento continua matematicamente indo até zero mas fica
+    visualmente cortado fora da área visível — só sobra a faixa fina de
+    degradê pretendida.
+
+    Aceita várias séries de uma vez (ex.: "Patrimônio Atual" + "Total
+    Investido", ou "Fechamento" + a linha de preço-teto) pra que o range
+    cubra todas elas.
     """
-    return dict(
-        type="rect", xref="paper", yref="paper", x0=0, y0=0, x1=1, y1=1,
-        line=dict(color=_COR_BORDA_GRAFICO, width=1), fillcolor="rgba(0,0,0,0)",
-    )
+    valores = [v for serie in series for v in serie if v is not None]
+    if not valores:
+        return [0, 1]
+    minimo, maximo = min(valores), max(valores)
+    if minimo == maximo:
+        respiro = abs(minimo) * margem_pct or 1
+        return [minimo - respiro, maximo + respiro]
+    respiro = (maximo - minimo) * margem_pct
+    # Valores financeiros aqui (patrimônio, preço de fechamento) nunca são
+    # negativos — o piso em 0 evita um respiro inútil abaixo de zero.
+    return [max(0, minimo - respiro), maximo + respiro]
 
 
 def _eixos_com_crosshair() -> tuple[dict, dict]:
@@ -194,7 +245,6 @@ def grafico_alocacao(
         plot_bgcolor="rgba(0,0,0,0)",
         height=altura,
         annotations=anotacoes,
-        shapes=[_borda_grafico()],
     )
     return fig
 
@@ -216,7 +266,7 @@ def grafico_evolucao_patrimonial(historico: list[dict], *, altura: int = 320, le
     # resto do app.
     fig.add_trace(go.Scatter(
         x=datas, y=valores_atual, name="Patrimônio Atual",
-        line=dict(color="#34d399", width=2), fill="tozeroy", fillcolor="rgba(52,211,153,0.1)",
+        line=dict(color="#34d399", width=2),
         customdata=[formatar_moeda(v) for v in valores_atual],
         hovertemplate="<b>%{customdata}</b><extra>Patrimônio Atual</extra>",
     ))
@@ -227,6 +277,7 @@ def grafico_evolucao_patrimonial(historico: list[dict], *, altura: int = 320, le
         hovertemplate="<b>%{customdata}</b><extra>Total Investido</extra>",
     ))
     eixo_x, eixo_y = _eixos_com_crosshair()
+    eixo_y["range"] = _intervalo_eixo_y(valores_atual, valores_investido)
     fig.update_layout(
         height=altura, margin=dict(t=10, b=10, l=10, r=10),
         paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
@@ -235,7 +286,6 @@ def grafico_evolucao_patrimonial(historico: list[dict], *, altura: int = 320, le
         hovermode="x unified",
         xaxis=eixo_x,
         yaxis=eixo_y,
-        shapes=[_borda_grafico()],
     )
     return fig
 
@@ -265,7 +315,7 @@ def grafico_preco_individual(
     fechamentos = [p["fechamento"] for p in pontos]
     fig.add_trace(go.Scatter(
         x=datas, y=fechamentos, name="Fechamento",
-        line=dict(color=COR_LINHA_ATIVO, width=2), fill="tozeroy", fillcolor="rgba(56,189,248,0.08)",
+        line=dict(color=COR_LINHA_ATIVO, width=2),
         customdata=[formatar_moeda(v) for v in fechamentos],
         hovertemplate="<b>%{customdata}</b><extra>Fechamento</extra>",
     ))
@@ -278,6 +328,10 @@ def grafico_preco_individual(
             annotation_font=dict(color=COR_PRECO_TETO, size=11),
         )
     eixo_x, eixo_y = _eixos_com_crosshair()
+    series_range = [fechamentos]
+    if preco_teto_com_margem is not None:
+        series_range.append([preco_teto_com_margem])
+    eixo_y["range"] = _intervalo_eixo_y(*series_range)
     fig.update_layout(
         height=altura, margin=dict(t=30, b=10, l=10, r=10),
         paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
@@ -285,6 +339,5 @@ def grafico_preco_individual(
         hovermode="x unified",
         xaxis=eixo_x,
         yaxis=eixo_y,
-        shapes=[_borda_grafico()],
     )
     return fig
