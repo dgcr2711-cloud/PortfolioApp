@@ -354,6 +354,58 @@ def test_buscar_taxas_economicas_erro_de_rede_vira_none():
         requests.get = get_original
 
 
+def test_buscar_taxas_economicas_falha_tambem_usa_cache_na_segunda_chamada():
+    """
+    Regressão real (2026-09-03): a primeira versão só cacheava o CAMINHO
+    FELIZ — uma falha repetida (chave com problema, plano insuficiente,
+    instabilidade) fazia CADA clique em "🔄 Atualizar Dados" esperar o
+    timeout inteiro de novo, deixando o app "quase travando". O cache
+    precisa cobrir sucesso E falha (com um prazo mais curto pra falha,
+    CACHE_TTL_FALHA_HGBRASIL_SEGUNDOS) — este teste garante que uma
+    segunda chamada logo depois de uma falha NÃO dispara outra requisição.
+    """
+    _resetar_caches_hgbrasil()
+    chave_original = market_data._obter_chave_hgbrasil
+    get_original = requests.get
+    chamadas = {"total": 0}
+
+    def get_fake(*a, **kw):
+        chamadas["total"] += 1
+        return _RespostaHgBrasilFalsa(403, None)  # chave inválida/sem permissão, por exemplo
+
+    market_data._obter_chave_hgbrasil = lambda: "chave-falsa"
+    requests.get = get_fake
+    try:
+        assert market_data.buscar_taxas_economicas() is None
+        assert market_data.buscar_taxas_economicas() is None
+        assert chamadas["total"] == 1  # a segunda chamada veio do cache de falha, não bateu na rede de novo
+    finally:
+        market_data._obter_chave_hgbrasil = chave_original
+        requests.get = get_original
+
+
+def test_buscar_cotacoes_hgbrasil_falha_tambem_usa_cache_na_segunda_chamada():
+    """Mesma regressão do teste acima, para o plano B de cotações."""
+    _resetar_caches_hgbrasil()
+    chave_original = market_data._obter_chave_hgbrasil
+    get_original = requests.get
+    chamadas = {"total": 0}
+
+    def get_fake(*a, **kw):
+        chamadas["total"] += 1
+        return _RespostaHgBrasilFalsa(402, None)
+
+    market_data._obter_chave_hgbrasil = lambda: "chave-falsa"
+    requests.get = get_fake
+    try:
+        assert market_data.buscar_cotacoes_hgbrasil(["PETR4"]) == {}
+        assert market_data.buscar_cotacoes_hgbrasil(["PETR4"]) == {}
+        assert chamadas["total"] == 1
+    finally:
+        market_data._obter_chave_hgbrasil = chave_original
+        requests.get = get_original
+
+
 def test_buscar_taxas_economicas_status_diferente_de_200_vira_none():
     _resetar_caches_hgbrasil()
     chave_original = market_data._obter_chave_hgbrasil

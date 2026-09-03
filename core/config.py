@@ -148,7 +148,20 @@ CACHE_TTL_DIVIDENDOS_SEGUNDOS = 24 * 60 * 60    # 24h — data prevista de divid
 # ----------------------------------------------------------------------
 URL_HGBRASIL_FINANCE = "https://api.hgbrasil.com/finance"
 URL_HGBRASIL_STOCK_PRICE = "https://api.hgbrasil.com/finance/stock_price"
-TIMEOUT_HGBRASIL_SEGUNDOS = 10
+# 2026-09-03 — reduzido de 10 para 6: um bug corrigido no mesmo dia (ver
+# CACHE_TTL_FALHA_HGBRASIL_SEGUNDOS abaixo) fazia "🔄 Atualizar Dados"
+# esperar até este prazo, EM DOBRO (taxas + cotações), A CADA CLIQUE,
+# sempre que a HG Brasil não respondia bem — quase travando a tela pro
+# Diego. Um timeout menor reduz o pior caso, mesmo já com o cache de
+# falha corrigindo o problema de verdade (não repetir a tentativa a cada
+# clique).
+TIMEOUT_HGBRASIL_SEGUNDOS = 6
+# Prazo TOTAL (reforço além do timeout= acima, mesma técnica de
+# core/cloud_sync.py::TIMEOUT_TOTAL_CARREGAR_NUVEM_SEGUNDOS) — cobre
+# também o tempo de estabelecer a conexão em si, não só a espera pela
+# resposta. Cada chamada (taxas, cotações) roda numa thread própria com
+# este limite.
+TIMEOUT_TOTAL_HGBRASIL_SEGUNDOS = 8
 
 # Chave da API, fora da pasta do projeto — mesmo motivo/local de sempre
 # (ver PASTA_SEGREDOS acima). Formato: {"api_key": "sua-chave-aqui"}.
@@ -161,6 +174,16 @@ CACHE_TTL_TAXAS_HGBRASIL_SEGUNDOS = 6 * 60 * 60
 # Mesmo intervalo do cache "automático" do Yahoo Finance acima, para as
 # cotações de ações/FIIs buscadas na HG Brasil (usadas só como plano B).
 CACHE_TTL_COTACAO_HGBRASIL_SEGUNDOS = 5 * 60
+
+# 2026-09-03 — CRÍTICO: quando a busca na HG Brasil FALHA (chave errada,
+# plano insuficiente, instabilidade), o resultado (None) também fica em
+# cache por este prazo curto — nunca fica tentando de novo a cada clique
+# em "🔄 Atualizar Dados" (o que, sem isso, significava esperar o timeout
+# INTEIRO, TODA VEZ, uma experiência de app quase travado). Bem mais curto
+# que o TTL de sucesso acima, porque uma falha pode ser passageira e vale
+# tentar de novo em alguns minutos, sem exigir um "Atualizar Dados" achar
+# a solução sozinho no primeiro clique depois de uma correção.
+CACHE_TTL_FALHA_HGBRASIL_SEGUNDOS = 5 * 60
 
 # De quanto em quanto tempo, no MÁXIMO, a busca automática de proventos
 # anunciados pela B3 (core/b3_publico.py) roda de novo sozinha dentro do

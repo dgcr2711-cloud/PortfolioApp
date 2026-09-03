@@ -17,6 +17,7 @@ novo, então ele sempre força uma consulta nova ao Yahoo Finance.
 from __future__ import annotations
 
 import json
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date, datetime
@@ -30,12 +31,14 @@ from core.config import (
     CACHE_TTL_COTACAO_HGBRASIL_SEGUNDOS,
     CACHE_TTL_COTACAO_SEGUNDOS,
     CACHE_TTL_DIVIDENDOS_SEGUNDOS,
+    CACHE_TTL_FALHA_HGBRASIL_SEGUNDOS,
     CACHE_TTL_NOME_EMPRESA_SEGUNDOS,
     CACHE_TTL_TAXAS_HGBRASIL_SEGUNDOS,
     CAMINHO_CHAVE_HGBRASIL,
     SUFIXO_B3,
     TICKER_IBOVESPA,
     TIMEOUT_HGBRASIL_SEGUNDOS,
+    TIMEOUT_TOTAL_HGBRASIL_SEGUNDOS,
     URL_HGBRASIL_FINANCE,
     URL_HGBRASIL_STOCK_PRICE,
 )
@@ -410,23 +413,25 @@ def _obter_chave_hgbrasil() -> str | None:
     return None
 
 
-def buscar_taxas_economicas() -> dict[str, Any] | None:
+def _ttl_aplicavel_hgbrasil(resultado: Any, ttl_sucesso: float) -> float:
     """
-    Busca as taxas SELIC e CDI mais recentes na HG Brasil (endpoint geral,
-    disponível para qualquer chave). Resultado cacheado por
-    CACHE_TTL_TAXAS_HGBRASIL_SEGUNDOS (essas taxas não mudam durante o dia).
-
-    Devolve None em qualquer situação em que não dê pra usar (chave não
-    configurada, sem internet, formato inesperado da resposta) — nunca
-    lança exceção, para nunca travar "🔄 Atualizar Dados" por causa disso.
+    `ttl_sucesso` se veio um resultado de verdade, TTL "de falha" (bem mais
+    curto, CACHE_TTL_FALHA_HGBRASIL_SEGUNDOS) se veio None/vazio — ver o
+    comentário grande em CACHE_TTL_FALHA_HGBRASIL_SEGUNDOS (core/config.py)
+    sobre por que isso é crítico: sem essa distinção, uma falha (chave
+    errada, plano insuficiente, instabilidade) faz "🔄 Atualizar Dados"
+    esperar o timeout INTEIRO de novo a CADA clique, para sempre — foi
+    exatamente isso que deixou o app "quase travando" pro Diego logo
+    depois desta função existir, e só apareceu de verdade com a chave
+    real, não nos testes (que sempre simulam sucesso OU falha isolados,
+    nunca "falha repetida entre cliques" — lição: cache tem que cobrir os
+    dois casos, não só o caminho feliz).
     """
-    agora = time.time()
-    if (
-        _cache_taxas_economicas["valor"] is not None
-        and (agora - _cache_taxas_economicas["buscado_em"]) < CACHE_TTL_TAXAS_HGBRASIL_SEGUNDOS
-    ):
-        return _cache_taxas_economicas["valor"]
+    return ttl_sucesso if resultado else CACHE_TTL_FALHA_HGBRASIL_SEGUNDOS
 
+
+def _buscar_taxas_economicas_sem_prazo() -> dict[str, Any] | None:
+    """Faz o trabalho de verdade de buscar_taxas_economicas() — separado numa função própria só para poder ser rodado dentro do prazo rígido de TIMEOUT_TOTAL_HGBRASIL_SEGUNDOS logo abaixo (mesmo padrão de core/cloud_sync.py::carregar_dados_completos_da_nuvem)."""
     chave = _obter_chave_hgbrasil()
     if not chave:
         return None
@@ -449,7 +454,7 @@ def buscar_taxas_economicas() -> dict[str, Any] | None:
         cdi = numero_valido(taxa_mais_recente.get("cdi"))
         if selic is None and cdi is None:
             return None
-        resultado = {
+        return {
             "selic": selic,
             "cdi": cdi,
             "data": taxa_mais_recente.get("date"),
@@ -458,6 +463,38 @@ def buscar_taxas_economicas() -> dict[str, Any] | None:
         }
     except Exception:
         return None
+
+
+def buscar_taxas_economicas() -> dict[str, Any] | None:
+    """
+    Busca as taxas SELIC e CDI mais recentes na HG Brasil (endpoint geral,
+    disponível para qualquer chave). Resultado (sucesso OU falha) sempre
+    fica em cache — por CACHE_TTL_TAXAS_HGBRASIL_SEGUNDOS num sucesso,
+    CACHE_TTL_FALHA_HGBRASIL_SEGUNDOS (bem mais curto) numa falha — ver
+    _ttl_aplicavel_hgbrasil.
+
+    Devolve None em qualquer situação em que não dê pra usar (chave não
+    configurada, sem internet, formato inesperado da resposta) — nunca
+    lança exceção. Também nunca "pendura" a tela: a busca de verdade roda
+    numa thread separada com um prazo total rígido (mesma técnica,
+    testada, de core/cloud_sync.py::carregar_dados_completos_da_nuvem) —
+    reforço além do timeout= já passado direto pro requests.get acima,
+    para o caso raro de a própria conexão travar antes disso.
+    """
+    agora = time.time()
+    ttl_atual = _ttl_aplicavel_hgbrasil(_cache_taxas_economicas["valor"], CACHE_TTL_TAXAS_HGBRASIL_SEGUNDOS)
+    if (agora - _cache_taxas_economicas["buscado_em"]) < ttl_atual:
+        return _cache_taxas_economicas["valor"]
+
+    resultado_container: dict[str, Any] = {}
+
+    def _trabalho() -> None:
+        resultado_container["valor"] = _buscar_taxas_economicas_sem_prazo()
+
+    thread = threading.Thread(target=_trabalho, daemon=True)
+    thread.start()
+    thread.join(timeout=TIMEOUT_TOTAL_HGBRASIL_SEGUNDOS)
+    resultado = resultado_container.get("valor")  # None também se a thread não terminou a tempo
 
     _cache_taxas_economicas["valor"] = resultado
     _cache_taxas_economicas["buscado_em"] = agora
@@ -492,28 +529,8 @@ def _extrair_resultados_stock_price(corpo: dict[str, Any]) -> list[dict[str, Any
     return []
 
 
-def buscar_cotacoes_hgbrasil(tickers: list[str]) -> dict[str, dict[str, Any]]:
-    """
-    Busca cotações de ações/FIIs na HG Brasil, numa ÚNICA requisição para
-    todos os tickers (economiza franquia da API, ao contrário de uma
-    chamada por ticker). Usado só como PLANO B — ver comentário no topo
-    desta seção — para os tickers que o Yahoo Finance não conseguiu buscar.
-
-    Devolve um dict {ticker: {preco, previousClose, nome, fonte,
-    atualizadoEm}} no mesmo formato de buscar_cotacao_ativo() — só com os
-    tickers que a HG Brasil conseguiu responder. Lista vazia/dict vazio em
-    qualquer falha (chave não configurada, sem internet, plano da conta não
-    inclui esse endpoint, formato inesperado) — nunca lança exceção.
-    """
-    if not tickers:
-        return {}
-
-    chave_cache = ",".join(sorted(tickers))
-    agora = time.time()
-    entrada_cache = _cache_cotacoes_hgbrasil.get(chave_cache)
-    if entrada_cache is not None and (agora - entrada_cache["buscado_em"]) < CACHE_TTL_COTACAO_HGBRASIL_SEGUNDOS:
-        return entrada_cache["valor"]
-
+def _buscar_cotacoes_hgbrasil_sem_prazo(tickers: list[str]) -> dict[str, dict[str, Any]]:
+    """Faz o trabalho de verdade de buscar_cotacoes_hgbrasil() — separado numa função própria só para poder ser rodado dentro do prazo rígido de TIMEOUT_TOTAL_HGBRASIL_SEGUNDOS logo abaixo."""
     chave = _obter_chave_hgbrasil()
     if not chave:
         return {}
@@ -547,8 +564,47 @@ def buscar_cotacoes_hgbrasil(tickers: list[str]) -> dict[str, dict[str, Any]]:
                 "fonte": "HG Brasil Finance",
                 "atualizadoEm": datetime.now().isoformat(),
             }
+        return resultado
     except Exception:
         return {}
+
+
+def buscar_cotacoes_hgbrasil(tickers: list[str]) -> dict[str, dict[str, Any]]:
+    """
+    Busca cotações de ações/FIIs na HG Brasil, numa ÚNICA requisição para
+    todos os tickers (economiza franquia da API, ao contrário de uma
+    chamada por ticker). Usado só como PLANO B — ver comentário no topo
+    desta seção — para os tickers que o Yahoo Finance não conseguiu buscar.
+
+    Devolve um dict {ticker: {preco, previousClose, nome, fonte,
+    atualizadoEm}} no mesmo formato de buscar_cotacao_ativo() — só com os
+    tickers que a HG Brasil conseguiu responder. Dict vazio em qualquer
+    falha (chave não configurada, sem internet, plano da conta não inclui
+    esse endpoint, formato inesperado) — nunca lança exceção. O resultado
+    (sucesso OU falha) sempre fica em cache — ver _ttl_aplicavel_hgbrasil —
+    e a busca roda com um prazo total rígido numa thread separada, mesma
+    proteção de buscar_taxas_economicas() acima.
+    """
+    if not tickers:
+        return {}
+
+    chave_cache = ",".join(sorted(tickers))
+    agora = time.time()
+    entrada_cache = _cache_cotacoes_hgbrasil.get(chave_cache)
+    if entrada_cache is not None:
+        ttl_atual = _ttl_aplicavel_hgbrasil(entrada_cache["valor"], CACHE_TTL_COTACAO_HGBRASIL_SEGUNDOS)
+        if (agora - entrada_cache["buscado_em"]) < ttl_atual:
+            return entrada_cache["valor"]
+
+    resultado_container: dict[str, dict[str, dict[str, Any]]] = {}
+
+    def _trabalho() -> None:
+        resultado_container["valor"] = _buscar_cotacoes_hgbrasil_sem_prazo(tickers)
+
+    thread = threading.Thread(target=_trabalho, daemon=True)
+    thread.start()
+    thread.join(timeout=TIMEOUT_TOTAL_HGBRASIL_SEGUNDOS)
+    resultado = resultado_container.get("valor", {})  # {} também se a thread não terminou a tempo
 
     _cache_cotacoes_hgbrasil[chave_cache] = {"valor": resultado, "buscado_em": agora}
     return resultado
