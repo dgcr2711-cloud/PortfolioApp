@@ -39,6 +39,7 @@ import json
 import os
 import shutil
 import stat
+import threading
 from typing import Any
 
 from core.config import PASTA_RAIZ, PASTA_SEGREDOS
@@ -76,6 +77,33 @@ COLECAO_PENDENCIAS_TESE = "pendencias_teses"
 
 _app_inicializado = False
 _migracao_ja_tentada = False
+
+# Prazo máximo (segundos) para qualquer chamada de rede ao Firestore
+# (2026-09-03 — antes disso não existia limite nenhum aqui). Sem isso, uma
+# instabilidade de rede ou de autenticação (ex: logo depois de trocar a
+# chave do Firebase, como aconteceu hoje) podia deixar o app TRAVADO com a
+# tela em branco pra sempre: carregar_dados() é chamado ANTES de qualquer
+# coisa aparecer na tela, e as chamadas ao Firestore não tinham prazo — se
+# a chamada nunca falhasse nem nunca respondesse, o app também nunca
+# terminava de carregar. Com o prazo, o pior caso vira "demora até
+# TIMEOUT_FIRESTORE_SEGUNDOS e cai pro arquivo local automaticamente" (ver
+# o "except Exception" logo abaixo de cada chamada), nunca mais uma tela
+# em branco permanente.
+TIMEOUT_FIRESTORE_SEGUNDOS = 10
+
+# 2026-09-03 — reforço além do timeout= passado direto pro Firestore acima:
+# a inicialização da conexão (_garantir_firebase_inicializado, chamada logo
+# no começo de carregar_dados_completos_da_nuvem) também pode, em teoria,
+# tentar uma verificação de rede por trás dos panos (bibliotecas de
+# autenticação do Google às vezes tentam detectar "estou rodando dentro do
+# Google Cloud?" antes mesmo da primeira chamada ao Firestore) — e isso NÃO
+# é coberto pelo timeout= do Firestore, porque acontece antes dele. Rodar a
+# função inteira (inicialização + busca) numa thread separada com um limite
+# de tempo TOTAL garante, de um jeito à prova de qualquer detalhe interno
+# dessas bibliotecas, que o app nunca mais fica esperando pra sempre —
+# no pior caso, ele só demora até TIMEOUT_TOTAL_CARREGAR_NUVEM_SEGUNDOS e
+# segue com o arquivo local, exatamente como se a nuvem estivesse fora do ar.
+TIMEOUT_TOTAL_CARREGAR_NUVEM_SEGUNDOS = 12
 
 
 def _migrar_chave_antiga_se_necessario() -> None:
@@ -231,7 +259,7 @@ def sincronizar_snapshot(snapshot: dict[str, Any]) -> bool:
         from firebase_admin import firestore
 
         db = firestore.client()
-        db.collection(COLECAO_FIRESTORE).document(DOCUMENTO_FIRESTORE).set(snapshot)
+        db.collection(COLECAO_FIRESTORE).document(DOCUMENTO_FIRESTORE).set(snapshot, timeout=TIMEOUT_FIRESTORE_SEGUNDOS)
         return True
     except Exception:
         return False
@@ -257,34 +285,66 @@ def salvar_dados_completos_na_nuvem(dados: dict[str, Any]) -> bool:
         from firebase_admin import firestore
 
         db = firestore.client()
-        db.collection(COLECAO_FIRESTORE).document(DOCUMENTO_DADOS_COMPLETOS).set(dados)
+        db.collection(COLECAO_FIRESTORE).document(DOCUMENTO_DADOS_COMPLETOS).set(dados, timeout=TIMEOUT_FIRESTORE_SEGUNDOS)
         return True
     except Exception:
         return False
 
 
-def carregar_dados_completos_da_nuvem() -> dict[str, Any] | None:
-    """
-    Lê o dicionário de dados completo do Firestore (ver
-    salvar_dados_completos_na_nuvem). Retorna None se a sincronização não
-    estiver configurada, estiver inacessível (sem internet), ou se o
-    documento ainda não existir por lá (primeira vez rodando o app depois
-    desta atualização, ou celular/nuvem nunca configurados) — em qualquer
-    um desses casos, quem chamou deve usar o arquivo local como alternativa
-    (é exatamente o que core.data_store.carregar_dados() faz).
-    """
+def _carregar_dados_completos_da_nuvem_sem_prazo() -> dict[str, Any] | None:
+    """Faz o trabalho de verdade de carregar_dados_completos_da_nuvem() —
+    separado numa função própria só para poder ser rodado dentro do prazo
+    rígido de TIMEOUT_TOTAL_CARREGAR_NUVEM_SEGUNDOS logo abaixo."""
     if not _garantir_firebase_inicializado():
         return None
     try:
         from firebase_admin import firestore
 
         db = firestore.client()
-        documento = db.collection(COLECAO_FIRESTORE).document(DOCUMENTO_DADOS_COMPLETOS).get()
+        documento = db.collection(COLECAO_FIRESTORE).document(DOCUMENTO_DADOS_COMPLETOS).get(timeout=TIMEOUT_FIRESTORE_SEGUNDOS)
         if not documento.exists:
             return None
         return documento.to_dict()
     except Exception:
         return None
+
+
+def carregar_dados_completos_da_nuvem() -> dict[str, Any] | None:
+    """
+    Lê o dicionário de dados completo do Firestore (ver
+    salvar_dados_completos_na_nuvem). Retorna None se a sincronização não
+    estiver configurada, estiver inacessível (sem internet), demorar demais
+    (mais de TIMEOUT_TOTAL_CARREGAR_NUVEM_SEGUNDOS — ver comentário na
+    constante), ou se o documento ainda não existir por lá (primeira vez
+    rodando o app depois desta atualização, ou celular/nuvem nunca
+    configurados) — em qualquer um desses casos, quem chamou deve usar o
+    arquivo local como alternativa (é exatamente o que
+    core.data_store.carregar_dados() faz). Esta função é chamada bem no
+    início do app, ANTES de qualquer coisa aparecer na tela — por isso o
+    cuidado extra pra nunca travar por tempo indefinido.
+
+    Nota técnica (2026-09-03): a primeira versão desta proteção usava
+    `ThreadPoolExecutor` dentro de um `with` — parecia certo e até
+    funcionava sozinha, mas testei de verdade (não só assumi) e descobri
+    que o PRÓPRIO `with` espera a thread travada terminar ao sair do bloco
+    (`shutdown(wait=True)` por padrão), cancelando o timeout na prática.
+    Por isso a troca para uma `threading.Thread` com `daemon=True`: essa,
+    sim, comprovadamente devolve o controle no prazo certo (testei os dois
+    jeitos lado a lado antes de trocar).
+    """
+    resultado_container: dict[str, Any] = {}
+
+    def _trabalho() -> None:
+        resultado_container["valor"] = _carregar_dados_completos_da_nuvem_sem_prazo()
+
+    thread = threading.Thread(target=_trabalho, daemon=True)
+    thread.start()
+    thread.join(timeout=TIMEOUT_TOTAL_CARREGAR_NUVEM_SEGUNDOS)
+    # Se "valor" não estiver no dicionário, a thread não terminou a tempo —
+    # ela continua rodando "órfã" em segundo plano (uma thread daemon nunca
+    # impede o app de seguir em frente nem de fechar depois), e o app usa
+    # o arquivo local, exatamente como se a nuvem estivesse fora do ar.
+    return resultado_container.get("valor")
 
 
 def buscar_pendencias_pendentes(colecao: str = COLECAO_PENDENCIAS) -> list[dict[str, Any]]:
@@ -304,7 +364,7 @@ def buscar_pendencias_pendentes(colecao: str = COLECAO_PENDENCIAS) -> list[dict[
         from firebase_admin import firestore
 
         db = firestore.client()
-        documentos = db.collection(colecao).where("status", "==", "pendente").stream()
+        documentos = db.collection(colecao).where("status", "==", "pendente").stream(timeout=TIMEOUT_FIRESTORE_SEGUNDOS)
         pendencias = []
         for documento in documentos:
             item = documento.to_dict() or {}
@@ -335,6 +395,6 @@ def marcar_pendencia(
             atualizacao["mensagemErro"] = mensagem_erro
         if campos_extra:
             atualizacao.update(campos_extra)
-        db.collection(colecao).document(doc_id).update(atualizacao)
+        db.collection(colecao).document(doc_id).update(atualizacao, timeout=TIMEOUT_FIRESTORE_SEGUNDOS)
     except Exception:
         pass
