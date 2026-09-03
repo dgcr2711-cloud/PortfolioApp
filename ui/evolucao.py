@@ -8,12 +8,12 @@ from __future__ import annotations
 
 from datetime import datetime
 
-import plotly.graph_objects as go
 import streamlit as st
 
 from core import calculations as calc
 from core import risco
 from core.formatting import formatar_data_br, formatar_pct
+from ui.graficos import grafico_evolucao_patrimonial
 from ui.styles import card_kpi_html, render_cards
 
 
@@ -29,23 +29,7 @@ def render(dados: dict, salvar) -> None:
     if not historico:
         st.info("Ainda não há snapshots suficientes. Atualize as cotações em dias diferentes para começar a ver a evolução aqui.")
     else:
-        fig = go.Figure()
-        datas = [formatar_data_br(h["data"]) for h in historico]
-        fig.add_trace(go.Scatter(
-            x=datas, y=[h["totalAtual"] for h in historico], name="Patrimônio Atual",
-            line=dict(color="#34d399", width=2), fill="tozeroy", fillcolor="rgba(52,211,153,0.1)",
-        ))
-        fig.add_trace(go.Scatter(
-            x=datas, y=[h["totalInvestido"] for h in historico], name="Total Investido",
-            line=dict(color="#9ca3af", width=2, dash="dash"),
-        ))
-        fig.update_layout(
-            height=320, margin=dict(t=10, b=10, l=10, r=10),
-            paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
-            legend=dict(orientation="h", yanchor="bottom", y=1.02, font=dict(color="#9ca3af")),
-            xaxis=dict(color="#9ca3af", gridcolor="rgba(156,163,175,0.1)"),
-            yaxis=dict(color="#9ca3af", gridcolor="rgba(156,163,175,0.1)"),
-        )
+        fig = grafico_evolucao_patrimonial(historico)
         st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
 
     st.subheader("🆚 Comparativo com o Ibovespa")

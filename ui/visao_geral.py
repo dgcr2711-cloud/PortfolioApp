@@ -13,6 +13,7 @@ from core import portfolio_analytics as analytics
 from core.config import COR_DESTAQUE, COR_NEGATIVO, COR_NEUTRO, COR_POSITIVO
 from core.formatting import formatar_moeda_priv, formatar_numero, formatar_pct
 from ui.ativos import montar_lista_ativos
+from ui.graficos import grafico_alocacao, grafico_evolucao_patrimonial
 from ui.styles import (
     badge_alerta,
     badge_indicacao,
@@ -76,6 +77,8 @@ def render(dados: dict, ocultar_valores: bool) -> None:
         card_kpi_html("Ativos Monitorados", f"{n_carteira} na carteira + {n_alvo} alvo(s)"),
     ])
 
+    _render_graficos_resumo(dados, posicoes)
+
     _render_diagnostico_carteira(dados, posicoes)
 
     st.subheader("Todos os ativos (posições + alvo)")
@@ -127,6 +130,41 @@ def render(dados: dict, ocultar_valores: bool) -> None:
     </div>
     """
     st.markdown(tabela_html, unsafe_allow_html=True)
+
+
+def _render_graficos_resumo(dados: dict, posicoes: list[dict]) -> None:
+    """
+    Os dois gráficos que faltavam na Visão Geral (pedido do Diego,
+    2026-09-03): alocação (donut, igual ao de 📈 Carteira) e evolução
+    patrimonial (igual ao de 📊 Evolução) lado a lado, em versão compacta —
+    aqui é só o resumo rápido; os detalhes (agrupar por setor, comparar com
+    o Ibovespa, Beta/Sharpe) continuam nas abas específicas.
+    """
+    col_alocacao, col_evolucao = st.columns(2)
+
+    with col_alocacao:
+        st.subheader("Alocação")
+        posicoes_com_valor = [p for p in posicoes if p["atual"] > 0]
+        with st.container(border=True):
+            if not posicoes_com_valor:
+                st.caption("Sem posições para exibir no gráfico ainda.")
+            else:
+                fig = grafico_alocacao(
+                    [p["ticker"] for p in posicoes_com_valor],
+                    [p["atual"] for p in posicoes_com_valor],
+                    altura=260,
+                )
+                st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+
+    with col_evolucao:
+        st.subheader("Evolução Patrimonial")
+        historico = dados.get("historico", [])
+        with st.container(border=True):
+            if not historico:
+                st.caption("Ainda não há snapshots suficientes — atualize as cotações em dias diferentes para ver a evolução aqui.")
+            else:
+                fig = grafico_evolucao_patrimonial(historico, altura=260, legenda=False)
+                st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
 
 
 def _render_diagnostico_carteira(dados: dict, posicoes: list[dict]) -> None:

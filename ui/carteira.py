@@ -6,7 +6,6 @@ Preço Teto/Margem/Indicação) + empresas-alvo, e o gráfico de alocação
 
 from __future__ import annotations
 
-import plotly.graph_objects as go
 import streamlit as st
 
 from core import calculations as calc
@@ -15,26 +14,8 @@ from core.config import SETORES_PADRAO
 from core.formatting import formatar_moeda_priv, formatar_pct, mascarar_qtd
 from ui.acoes_comuns import atualizar_dados, exibir_status_cotacoes
 from ui.ativos import montar_lista_ativos
+from ui.graficos import grafico_alocacao
 from ui.styles import badge_alerta, badge_html, badge_indicacao, badge_variacao_dia, card_kpi_html, render_cards
-
-PALETA_ALOCACAO = ["#34d399", "#38bdf8", "#fbbf24", "#a78bfa", "#fb7185", "#22d3ee", "#f472b6", "#a3e635", "#fb923c", "#94a3b8"]
-
-
-def _grafico_alocacao(labels: list[str], valores: list[float]) -> go.Figure:
-    fig = go.Figure(data=[go.Pie(
-        labels=labels, values=valores, hole=0.55,
-        marker=dict(colors=PALETA_ALOCACAO, line=dict(color="#111827", width=2)),
-        textinfo="percent", textfont=dict(color="#e5e7eb", size=12),
-    )])
-    fig.update_layout(
-        showlegend=True,
-        legend=dict(orientation="h", yanchor="bottom", y=-0.25, font=dict(color="#9ca3af", size=11)),
-        margin=dict(t=10, b=10, l=10, r=10),
-        paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(0,0,0,0)",
-        height=300,
-    )
-    return fig
 
 
 def render(dados: dict, ocultar_valores: bool, salvar) -> None:
@@ -125,14 +106,14 @@ def _aba_posicoes_e_alocacao(dados: dict, ocultar_valores: bool, posicoes: list[
             if not posicoes_com_valor:
                 st.caption("Sem posições para exibir no gráfico ainda.")
             elif agrupar_por == "Ativo":
-                fig = _grafico_alocacao([p["ticker"] for p in posicoes_com_valor], [p["atual"] for p in posicoes_com_valor])
+                fig = grafico_alocacao([p["ticker"] for p in posicoes_com_valor], [p["atual"] for p in posicoes_com_valor])
                 st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
             else:
                 por_setor: dict[str, float] = {}
                 for p in posicoes_com_valor:
                     setor = dados["setores"].get(p["ticker"], "Sem setor definido")
                     por_setor[setor] = por_setor.get(setor, 0) + p["atual"]
-                fig = _grafico_alocacao(list(por_setor.keys()), list(por_setor.values()))
+                fig = grafico_alocacao(list(por_setor.keys()), list(por_setor.values()))
                 st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
 
     with st.expander("⚙️ Definir setor de um ativo"):
