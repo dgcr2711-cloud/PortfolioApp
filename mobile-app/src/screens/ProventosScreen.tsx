@@ -42,7 +42,7 @@ export function ProventosScreen() {
       style={estilos.container}
       contentContainerStyle={estilos.lista}
       data={lista}
-      keyExtractor={(item) => item.id}
+      keyExtractor={(item: Provento) => item.id}
       ListHeaderComponent={
         <>
           <View style={estilos.linhaTitulo}>
@@ -61,7 +61,7 @@ export function ProventosScreen() {
         </>
       }
       ListEmptyComponent={<Text style={estilos.aviso}>Nenhum provento registrado ainda.</Text>}
-      renderItem={({ item }) => <LinhaProvento provento={item} ocultarValores={ocultarValores} />}
+      renderItem={({ item }: { item: Provento }) => <LinhaProvento provento={item} ocultarValores={ocultarValores} />}
     />
   );
 }

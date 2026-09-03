@@ -16,7 +16,15 @@ import { PinProvider, usePin } from './src/contexts/PinContext';
 import { AuthProvider, useAuth } from './src/contexts/AuthContext';
 import { cores } from './src/theme';
 
-const Tab = createBottomTabNavigator();
+type AbasPrincipais = {
+  'Visão Geral': undefined;
+  Carteira: undefined;
+  Fundamentos: undefined;
+  Compras: undefined;
+  Mais: undefined;
+};
+
+const Tab = createBottomTabNavigator<AbasPrincipais>();
 
 // Tema escuro do react-navigation, ajustado pra nossa paleta (fundo/dourado)
 // em vez do azul padrão do DarkTheme.
@@ -77,12 +85,12 @@ function ConteudoComTravaPin() {
     <NavigationContainer theme={temaEscuro}>
       <StatusBar style="light" />
       <Tab.Navigator
-        screenOptions={({ route }) => ({
+        screenOptions={({ route }: { route: { name: string } }) => ({
           headerShown: false,
           tabBarActiveTintColor: cores.destaque,
           tabBarInactiveTintColor: cores.textoSecundario,
           tabBarStyle: { backgroundColor: cores.fundoCard, borderTopColor: cores.borda },
-          tabBarIcon: () => <Text style={{ fontSize: 18 }}>{ICONE_POR_ABA[route.name]}</Text>,
+          tabBarIcon: () => <Text style={{ fontSize: 18 }}>{ICONE_POR_ABA[route.name] ?? '•'}</Text>,
         })}
       >
         <Tab.Screen name="Visão Geral" component={VisaoGeralScreen} />

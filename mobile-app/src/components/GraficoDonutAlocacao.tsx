@@ -6,6 +6,9 @@ import { formatarPct } from '../format';
 import { PALETA_ALOCACAO } from './GraficoAlocacao';
 import type { FatiaAlocacao } from './GraficoAlocacao';
 
+const SvgComponent = Svg as unknown as React.ComponentType<any>;
+const CircleComponent = Circle as unknown as React.ComponentType<any>;
+
 /**
  * Gráfico de alocação em forma de rosca (donut) de verdade — pedido por
  * Diego (2026-09-03), no estilo do gráfico do TradeMap. Desenhado com
@@ -44,7 +47,7 @@ export function GraficoDonutAlocacao({
   const ordenados = [...dados].sort((a, b) => b.valor - a.valor);
 
   let acumulado = 0;
-  const fatias = ordenados.map((item, indice) => {
+  const fatias = ordenados.map((item: FatiaAlocacao, indice: number) => {
     const fracao = item.valor / total;
     const comprimentoArco = fracao * CIRCUNFERENCIA;
     // Um pequeno "gap" entre fatias (2px) deixa o donut mais legível quando
@@ -55,7 +58,7 @@ export function GraficoDonutAlocacao({
     const dashOffset = -acumulado;
     acumulado += comprimentoArco;
     return (
-      <Circle
+      <CircleComponent
         key={item.rotulo}
         cx={CENTRO}
         cy={CENTRO}
@@ -73,11 +76,11 @@ export function GraficoDonutAlocacao({
   return (
     <View>
       <View style={estilos.areaDonut}>
-        <Svg width={TAMANHO_SVG} height={TAMANHO_SVG} style={estilos.rotacaoInicial}>
+        <SvgComponent width={TAMANHO_SVG} height={TAMANHO_SVG} style={estilos.rotacaoInicial}>
           {/* Trilha de fundo (mostra o círculo completo antes das fatias coloridas) */}
-          <Circle cx={CENTRO} cy={CENTRO} r={RAIO} stroke={cores.borda} strokeWidth={GROSSURA} fill="transparent" />
+          <CircleComponent cx={CENTRO} cy={CENTRO} r={RAIO} stroke={cores.borda} strokeWidth={GROSSURA} fill="transparent" />
           {fatias}
-        </Svg>
+        </SvgComponent>
         {(rotuloCentral || valorCentral) && (
           <View style={estilos.centroTexto} pointerEvents="none">
             {valorCentral && (

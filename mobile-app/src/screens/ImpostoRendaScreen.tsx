@@ -47,7 +47,7 @@ export function ImpostoRendaScreen() {
       style={estilos.container}
       contentContainerStyle={estilos.lista}
       data={mesesRecentesPrimeiro}
-      keyExtractor={(item) => item.mes}
+      keyExtractor={(item: ResumoMensalIR) => item.mes}
       ListHeaderComponent={
         <>
           <View style={estilos.linhaTitulo}>
@@ -71,7 +71,7 @@ export function ImpostoRendaScreen() {
       ListEmptyComponent={
         <Text style={estilos.aviso}>Nenhuma venda registrada ainda — assim que houver uma, o resumo aparece aqui.</Text>
       }
-      renderItem={({ item }) => <CartaoMes item={item} />}
+      renderItem={({ item }: { item: ResumoMensalIR }) => <CartaoMes item={item} />}
       ListFooterComponent={
         <>
           <SecaoBensEDireitos anos={bensEDireitos ?? []} />

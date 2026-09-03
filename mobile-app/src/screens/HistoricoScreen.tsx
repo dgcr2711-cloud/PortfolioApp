@@ -84,7 +84,7 @@ export function HistoricoScreen() {
       style={estilos.container}
       contentContainerStyle={estilos.lista}
       data={snapshot.compras ?? []}
-      keyExtractor={(item) => item.id}
+      keyExtractor={(item: Transacao) => item.id}
       ListHeaderComponent={
         <>
           <Text style={estilos.titulo}>Histórico</Text>
@@ -92,7 +92,7 @@ export function HistoricoScreen() {
         </>
       }
       ListEmptyComponent={<Text style={estilos.aviso}>Nenhuma transação registrada ainda.</Text>}
-      renderItem={({ item }) => (
+      renderItem={({ item }: { item: Transacao }) => (
         <LinhaTransacao
           transacao={item}
           status={statusPorId[item.id] ?? 'idle'}

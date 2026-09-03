@@ -138,7 +138,7 @@ export function PrecoTetoScreen() {
       <FlatList
         contentContainerStyle={estilos.lista}
         data={precosTeto}
-        keyExtractor={(item) => item.ticker}
+        keyExtractor={(item: PrecoTeto) => item.ticker}
         keyboardShouldPersistTaps="handled"
         ListHeaderComponent={
           <>
@@ -206,7 +206,7 @@ export function PrecoTetoScreen() {
           </>
         }
         ListEmptyComponent={<Text style={estilos.aviso}>Nenhum preço teto calculado ainda.</Text>}
-        renderItem={({ item }) => <LinhaPrecoTeto item={item} />}
+        renderItem={({ item }: { item: PrecoTeto }) => <LinhaPrecoTeto item={item} />}
       />
     </KeyboardAvoidingView>
   );

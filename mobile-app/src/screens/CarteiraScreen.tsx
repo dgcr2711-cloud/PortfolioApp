@@ -67,10 +67,10 @@ export function CarteiraScreen() {
       </View>
       <FlatList
         data={snapshot.ativos}
-        keyExtractor={(item) => item.ticker}
+        keyExtractor={(item: Ativo) => item.ticker}
         contentContainerStyle={estilos.lista}
         ListHeaderComponent={<BlocoRebalanceamento rebalanceamento={snapshot.rebalanceamento ?? null} />}
-        renderItem={({ item }) => (
+        renderItem={({ item }: { item: Ativo }) => (
           <CartaoAtivo ativo={item} expandido={expandidos.has(item.ticker)} aoAlternar={() => alternar(item.ticker)} />
         )}
       />

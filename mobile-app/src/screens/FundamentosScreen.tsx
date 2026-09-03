@@ -49,7 +49,7 @@ export function FundamentosScreen() {
       style={estilos.container}
       contentContainerStyle={[estilos.lista, { paddingTop: espacoTopo }]}
       data={snapshot.ativos}
-      keyExtractor={(item) => item.ticker}
+      keyExtractor={(item: Ativo) => item.ticker}
       ListHeaderComponent={
         <>
           <Text style={estilos.titulo}>Fundamentos</Text>
@@ -85,7 +85,7 @@ export function FundamentosScreen() {
           {snapshot.ativos.length > 0 && <Text style={estilos.subtitulo}>Indicadores por Ativo</Text>}
         </>
       }
-      renderItem={({ item }) => <CartaoFundamentos ativo={item} />}
+      renderItem={({ item }: { item: Ativo }) => <CartaoFundamentos ativo={item} />}
     />
   );
 }

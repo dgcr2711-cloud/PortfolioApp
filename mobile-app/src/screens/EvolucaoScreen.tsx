@@ -51,7 +51,7 @@ export function EvolucaoScreen() {
       style={estilos.container}
       contentContainerStyle={estilos.lista}
       data={historico}
-      keyExtractor={(item) => item.data}
+      keyExtractor={(item: PontoHistorico) => item.data}
       ListHeaderComponent={
         <>
           <Text style={estilos.titulo}>Evolução Patrimonial</Text>
@@ -94,7 +94,7 @@ export function EvolucaoScreen() {
         </>
       }
       ListEmptyComponent={<Text style={estilos.aviso}>Ainda não há snapshots suficientes. Atualize as cotações em dias diferentes para começar a ver a evolução aqui.</Text>}
-      renderItem={({ item }) => <BarraSnapshot ponto={item} maiorValor={maiorValor} />}
+      renderItem={({ item }: { item: PontoHistorico }) => <BarraSnapshot ponto={item} maiorValor={maiorValor} />}
     />
   );
 }
@@ -177,7 +177,7 @@ function GraficoLinhaPatrimonio({ historico }: { historico: PontoHistorico[] }) 
 
   return (
     <View>
-      <View style={estilos.areaGrafico} onLayout={(evento) => setLargura(evento.nativeEvent.layout.width)}>
+      <View style={estilos.areaGrafico} onLayout={(evento: { nativeEvent: { layout: { width: number } } }) => setLargura(evento.nativeEvent.layout.width)}>
         {largura > 0 && (
           <>
             <Text style={estilos.rotuloTopoGrafico}>{formatarMoeda(valorMax)}</Text>
