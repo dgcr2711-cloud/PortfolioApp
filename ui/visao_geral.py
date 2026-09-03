@@ -18,7 +18,7 @@ import streamlit as st
 from core import calculations as calc
 from core import portfolio_analytics as analytics
 from core.config import COR_DESTAQUE, COR_NEGATIVO, COR_NEUTRO, COR_POSITIVO
-from core.formatting import formatar_moeda_priv, formatar_numero, formatar_pct
+from core.formatting import formatar_moeda, formatar_moeda_priv, formatar_numero, formatar_pct
 from ui.ativos import montar_lista_ativos
 from ui.graficos import grafico_alocacao, grafico_evolucao_patrimonial
 from ui.styles import (
@@ -159,6 +159,28 @@ def _render_tabela_ativos(lista_ativos: list[dict]) -> None:
     st.markdown(tabela_html, unsafe_allow_html=True)
 
 
+def _agrupar_para_donut(posicoes_com_valor: list[dict], limite: int = 7) -> tuple[list[str], list[float]]:
+    """
+    Agrupa o excedente em "Outros" quando há mais posições do que cores
+    validadas na paleta do donut (2026-09-03, pesquisa do skill interno de
+    dataviz — ver `ui/graficos.py::PALETA_ALOCACAO`): uma 8ª/9ª cor
+    "inventada" deixaria de ser a ordem validada contra daltonismo —
+    melhor juntar as menores posições num "Outros" do que reciclar cor.
+    Mantém as `limite - 1` maiores posições e soma o resto num "Outros";
+    ordena por valor decrescente antes de cortar, pra "Outros" ser sempre
+    o conjunto das MENORES posições, nunca uma escolha arbitrária. Com
+    `limite` posições ou menos (o caso normal do Diego hoje — 6 ativos),
+    não muda nada.
+    """
+    ordenadas = sorted(posicoes_com_valor, key=lambda p: p["atual"], reverse=True)
+    if len(ordenadas) <= limite:
+        return [p["ticker"] for p in ordenadas], [p["atual"] for p in ordenadas]
+    principais, resto = ordenadas[: limite - 1], ordenadas[limite - 1 :]
+    labels = [p["ticker"] for p in principais] + ["Outros"]
+    valores = [p["atual"] for p in principais] + [sum(p["atual"] for p in resto)]
+    return labels, valores
+
+
 def _render_graficos_resumo(dados: dict, posicoes: list[dict], ocultar_valores: bool) -> None:
     """
     Os dois gráficos que faltavam na Visão Geral (pedido do Diego,
@@ -168,13 +190,15 @@ def _render_graficos_resumo(dados: dict, posicoes: list[dict], ocultar_valores: 
     o Ibovespa, Beta/Sharpe) continuam nas abas específicas.
 
     Privacidade ("ocultar valores", 2026-09-03, pedido do Diego): o donut
-    de Alocação já mostra só Ticker + percentual (nunca um valor em R$),
-    então não precisa de nenhum tratamento especial. Já a Evolução
-    Patrimonial é uma série histórica em R$ — mascarar só os números com
-    "••••" não bastaria, porque a FORMA da curva ainda revelaria a
-    trajetória do patrimônio. Por isso, com `ocultar_valores` ativo, o
-    gráfico inteiro é substituído por um aviso — a informação some de
-    verdade, não só fica mascarada.
+    de Alocação em si já mostra só Ticker + percentual (nunca um valor em
+    R$) — o total no centro (novo, mesmo refinamento visual) usa
+    `formatar_moeda_priv`, então já sai mascarado ("R$ ••••") sozinho
+    quando `ocultar_valores` está ativo, sem precisar de nenhum tratamento
+    especial aqui. Já a Evolução Patrimonial é uma série histórica em R$ —
+    mascarar só os números com "••••" não bastaria, porque a FORMA da
+    curva ainda revelaria a trajetória do patrimônio. Por isso, com
+    `ocultar_valores` ativo, o gráfico inteiro é substituído por um aviso
+    — a informação some de verdade, não só fica mascarada.
     """
     col_alocacao, col_evolucao = st.columns(2)
 
@@ -185,10 +209,17 @@ def _render_graficos_resumo(dados: dict, posicoes: list[dict], ocultar_valores: 
             if not posicoes_com_valor:
                 st.caption("Sem posições para exibir no gráfico ainda.")
             else:
+                labels_donut, valores_donut = _agrupar_para_donut(posicoes_com_valor)
                 fig = grafico_alocacao(
-                    [p["ticker"] for p in posicoes_com_valor],
-                    [p["atual"] for p in posicoes_com_valor],
+                    labels_donut, valores_donut,
                     altura=300,
+                    valor_central=formatar_moeda_priv(sum(valores_donut), ocultar_valores),
+                    rotulo_central="Patrimônio",
+                    # R$ por fatia (2026-09-03, pesquisa de dashboards de
+                    # investimento reais): só quando os valores não estão
+                    # ocultos — no modo privado, cai pro comportamento de
+                    # antes (só ticker + %), sem vazar nenhum valor.
+                    valores_formatados=None if ocultar_valores else [formatar_moeda(v) for v in valores_donut],
                 )
                 st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
 

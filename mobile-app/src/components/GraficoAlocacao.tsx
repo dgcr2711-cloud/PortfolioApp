@@ -5,13 +5,18 @@ import { formatarPct } from '../format';
 
 /**
  * Mesma paleta de cores do gráfico de alocação do PC
- * (ui/carteira.py::PALETA_ALOCACAO), pra manter a mesma identidade visual
+ * (ui/graficos.py::PALETA_ALOCACAO), pra manter a mesma identidade visual
  * entre as duas plataformas. Exportada (2026-09-03) para ser reaproveitada
  * também pelo GraficoDonutAlocacao.tsx, que usa a mesma paleta.
+ *
+ * 2026-09-03 (2º refinamento visual do dia, pedido do Diego — "cores
+ * diferentes"): atualizada pra ficar igual à paleta nova do PC — mais
+ * variada, e sem tons de vermelho/rosa de propósito (essa família de cor
+ * já significa prejuízo/queda no resto do app).
  */
 export const PALETA_ALOCACAO = [
-  '#34d399', '#38bdf8', '#fbbf24', '#a78bfa', '#fb7185',
-  '#22d3ee', '#f472b6', '#a3e635', '#fb923c', '#94a3b8',
+  '#34d399', '#fbbf24', '#38bdf8', '#a78bfa', '#f472b6',
+  '#2dd4bf', '#fb923c', '#c084fc', '#4ade80', '#94a3b8',
 ];
 
 export interface FatiaAlocacao {

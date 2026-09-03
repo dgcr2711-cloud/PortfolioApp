@@ -76,35 +76,42 @@ def render(dados: dict, ocultar_valores: bool, salvar) -> None:
 
 
 def _aba_posicoes_e_grafico(dados: dict, ocultar_valores: bool, posicoes: list[dict], salvar) -> None:
+    """
+    2026-09-03 (2º refinamento visual do dia, pedido do Diego — "carteira
+    com informação da esquerda pra direita preenchendo toda a tela, sem
+    ter nada perto, ajuste os outros itens pra cima dela"): a tabela de
+    Suas Posições deixou de dividir a tela com o gráfico individual (que
+    ficava ao lado, em `st.columns([2, 1])`) — agora ela sozinha ocupa a
+    largura inteira da aba. O gráfico e o formulário de "adicionar empresa
+    alvo" (os "outros itens") subiram pra cima da tabela, em vez de ficar
+    ao lado dela.
+    """
     lista_ativos = montar_lista_ativos(dados)
-    col_tabela, col_grafico = st.columns([2, 1])
 
-    with col_tabela:
-        st.subheader("📌 Suas Posições")
-        with st.form("form_empresa_alvo", clear_on_submit=True, border=False):
-            c1, c2 = st.columns([3, 1])
-            ticker_alvo = c1.text_input("Adicionar empresa alvo", placeholder="Ex: ITUB4", label_visibility="collapsed").strip().upper()
-            enviado = c2.form_submit_button("🎯 Adicionar", use_container_width=True)
-            if enviado and ticker_alvo:
-                tickers_carteira = {p["ticker"] for p in posicoes}
-                if ticker_alvo in tickers_carteira:
-                    st.warning(f"{ticker_alvo} já é uma posição na sua carteira.")
-                elif ticker_alvo in dados["watchlist"]:
-                    st.info(f"{ticker_alvo} já está na lista de observação.")
-                else:
-                    dados["watchlist"].append(ticker_alvo)
-                    salvar(dados)
-                    st.rerun()
+    _secao_grafico_individual(lista_ativos)
 
-        if not lista_ativos:
-            st.info('Nenhuma posição ainda. Vá até a aba "🧾 Compras & Vendas" e registre sua primeira compra.')
-        else:
-            lista_ordenada = _ordenar_lista_ativos(lista_ativos)
-            _tabela_posicoes_html(lista_ordenada, ocultar_valores)
-            _lista_remover_ativo(lista_ativos, dados, salvar)
+    st.subheader("📌 Suas Posições")
+    with st.form("form_empresa_alvo", clear_on_submit=True, border=False):
+        c1, c2 = st.columns([3, 1])
+        ticker_alvo = c1.text_input("Adicionar empresa alvo", placeholder="Ex: ITUB4", label_visibility="collapsed").strip().upper()
+        enviado = c2.form_submit_button("🎯 Adicionar", use_container_width=True)
+        if enviado and ticker_alvo:
+            tickers_carteira = {p["ticker"] for p in posicoes}
+            if ticker_alvo in tickers_carteira:
+                st.warning(f"{ticker_alvo} já é uma posição na sua carteira.")
+            elif ticker_alvo in dados["watchlist"]:
+                st.info(f"{ticker_alvo} já está na lista de observação.")
+            else:
+                dados["watchlist"].append(ticker_alvo)
+                salvar(dados)
+                st.rerun()
 
-    with col_grafico:
-        _secao_grafico_individual(lista_ativos)
+    if not lista_ativos:
+        st.info('Nenhuma posição ainda. Vá até a aba "🧾 Compras & Vendas" e registre sua primeira compra.')
+    else:
+        lista_ordenada = _ordenar_lista_ativos(lista_ativos)
+        _tabela_posicoes_html(lista_ordenada, ocultar_valores)
+        _lista_remover_ativo(lista_ativos, dados, salvar)
 
     with st.expander("⚙️ Definir setor de um ativo"):
         tickers_disponiveis = [p["ticker"] for p in posicoes]
@@ -140,13 +147,19 @@ def _secao_grafico_individual(lista_ativos: list[dict]) -> None:
             st.caption("Registre uma posição ou adicione uma empresa-alvo para ver o gráfico.")
             return
 
-        tickers = [a["ticker"] for a in lista_ativos]
-        ticker_escolhido = st.selectbox("Ativo", tickers, key="sel_ticker_grafico_individual")
-        rotulos_periodo = list(market_data.PERIODOS_HISTORICO_PRECO.keys())
-        periodo_rotulo = st.radio(
-            "Período", rotulos_periodo, index=rotulos_periodo.index("6 meses"),
-            horizontal=True, key="periodo_grafico_individual",
-        )
+        # Seletor de ativo e de período lado a lado (2026-09-03: esta
+        # seção passou a ocupar a largura inteira da aba, então os dois
+        # controles cabem numa linha só, em vez de empilhados).
+        col_ativo, col_periodo = st.columns([1, 2])
+        with col_ativo:
+            tickers = [a["ticker"] for a in lista_ativos]
+            ticker_escolhido = st.selectbox("Ativo", tickers, key="sel_ticker_grafico_individual")
+        with col_periodo:
+            rotulos_periodo = list(market_data.PERIODOS_HISTORICO_PRECO.keys())
+            periodo_rotulo = st.radio(
+                "Período", rotulos_periodo, index=rotulos_periodo.index("6 meses"),
+                horizontal=True, key="periodo_grafico_individual",
+            )
         periodo_codigo = market_data.PERIODOS_HISTORICO_PRECO[periodo_rotulo]
 
         with st.spinner(f"Buscando histórico de {ticker_escolhido}..."):
@@ -157,7 +170,10 @@ def _secao_grafico_individual(lista_ativos: list[dict]) -> None:
             return
 
         ativo = next(a for a in lista_ativos if a["ticker"] == ticker_escolhido)
-        fig = grafico_preco_individual(pontos, preco_teto_com_margem=ativo.get("preco_teto_com_margem"))
+        # Altura maior que o padrão (2026-09-03): o gráfico agora ocupa a
+        # largura inteira da tela em vez de 1/3, então fica mais elegante
+        # com mais altura também — evita um gráfico "achatado".
+        fig = grafico_preco_individual(pontos, preco_teto_com_margem=ativo.get("preco_teto_com_margem"), altura=420)
         st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
         st.caption("Fonte: Yahoo Finance — fechamento diário.")
 
