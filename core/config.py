@@ -139,6 +139,29 @@ CACHE_TTL_NOME_EMPRESA_SEGUNDOS = 24 * 60 * 60  # 24h (nome da empresa não muda
 CACHE_TTL_FUNDAMENTOS_SEGUNDOS = 24 * 60 * 60   # 24h — P/L, ROE etc. não mudam intradia
 CACHE_TTL_DIVIDENDOS_SEGUNDOS = 24 * 60 * 60    # 24h — data prevista de dividendo não muda intradia
 
+# ----------------------------------------------------------------------
+# HG Brasil Finance (2026-09-03) — API paga por chave, usada como (1) fonte
+# das taxas SELIC/CDI (que o Yahoo Finance não tem) e (2) reforço/plano B
+# para cotações de ações/FIIs quando o Yahoo Finance falhar para algum
+# ticker. O Yahoo Finance continua sendo a fonte PRINCIPAL de preço (é
+# grátis, sem chave, e já funciona bem) — ver core/market_data.py.
+# ----------------------------------------------------------------------
+URL_HGBRASIL_FINANCE = "https://api.hgbrasil.com/finance"
+URL_HGBRASIL_STOCK_PRICE = "https://api.hgbrasil.com/finance/stock_price"
+TIMEOUT_HGBRASIL_SEGUNDOS = 10
+
+# Chave da API, fora da pasta do projeto — mesmo motivo/local de sempre
+# (ver PASTA_SEGREDOS acima). Formato: {"api_key": "sua-chave-aqui"}.
+CAMINHO_CHAVE_HGBRASIL = PASTA_SEGREDOS / "hgbrasil_api_key.json"
+
+# SELIC/CDI não mudam durante o dia (o Comitê de Política Monetária só se
+# reúne a cada ~45 dias) — um cache de 6h evita gastar franquia da API à
+# toa, sem nunca deixar o dado ficar "velho" de verdade.
+CACHE_TTL_TAXAS_HGBRASIL_SEGUNDOS = 6 * 60 * 60
+# Mesmo intervalo do cache "automático" do Yahoo Finance acima, para as
+# cotações de ações/FIIs buscadas na HG Brasil (usadas só como plano B).
+CACHE_TTL_COTACAO_HGBRASIL_SEGUNDOS = 5 * 60
+
 # De quanto em quanto tempo, no MÁXIMO, a busca automática de proventos
 # anunciados pela B3 (core/b3_publico.py) roda de novo sozinha dentro do
 # "🔄 Atualizar Dados" — evita bater no site da B3 a cada clique (comum

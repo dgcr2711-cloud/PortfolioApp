@@ -28,7 +28,7 @@ from typing import Any
 
 from core.auth import CAMINHO_CONFIG_LOGIN
 from core.cloud_sync import CAMINHO_CHAVE_FIREBASE
-from core.config import PASTA_SEGREDOS
+from core.config import CAMINHO_CHAVE_HGBRASIL, PASTA_SEGREDOS
 from core.notificacoes_email import CAMINHO_CONFIG_EMAIL
 from core.notificacoes_whatsapp import CAMINHO_CONFIG_WHATSAPP
 
@@ -126,6 +126,19 @@ def gerar_texto_secrets() -> str:
     else:
         blocos.append("")
         blocos.append(f"# Nenhuma configuração de WhatsApp encontrada em {CAMINHO_CONFIG_WHATSAPP} (alerta por WhatsApp não configurado ainda)")
+
+    if CAMINHO_CHAVE_HGBRASIL.exists():
+        try:
+            with open(CAMINHO_CHAVE_HGBRASIL, "r", encoding="utf-8") as f:
+                chave_hgbrasil = json.load(f)
+            blocos.append("")
+            blocos.append(_secao_toml("hgbrasil", chave_hgbrasil))
+        except (OSError, json.JSONDecodeError) as erro:
+            blocos.append("")
+            blocos.append(f"# Não consegui ler {CAMINHO_CHAVE_HGBRASIL}: {erro}")
+    else:
+        blocos.append("")
+        blocos.append(f"# Nenhuma chave da HG Brasil encontrada em {CAMINHO_CHAVE_HGBRASIL} (taxas SELIC/CDI não configuradas ainda — rode 'Configurar Chave HG Brasil.bat' se quiser)")
 
     if CAMINHO_CONFIG_LOGIN.exists():
         try:

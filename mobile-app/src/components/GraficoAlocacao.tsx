@@ -6,9 +6,10 @@ import { formatarPct } from '../format';
 /**
  * Mesma paleta de cores do gráfico de alocação do PC
  * (ui/carteira.py::PALETA_ALOCACAO), pra manter a mesma identidade visual
- * entre as duas plataformas.
+ * entre as duas plataformas. Exportada (2026-09-03) para ser reaproveitada
+ * também pelo GraficoDonutAlocacao.tsx, que usa a mesma paleta.
  */
-const PALETA_ALOCACAO = [
+export const PALETA_ALOCACAO = [
   '#34d399', '#38bdf8', '#fbbf24', '#a78bfa', '#fb7185',
   '#22d3ee', '#f472b6', '#a3e635', '#fb923c', '#94a3b8',
 ];
@@ -20,14 +21,17 @@ export interface FatiaAlocacao {
 
 /**
  * Espelha o gráfico de "Alocação" da aba 📈 Carteira do PC — lá é um donut
- * feito com plotly (biblioteca de gráficos em Python). O celular não tem
- * uma biblioteca de gráficos instalada (o projeto evita adicionar
- * dependências novas ao app do celular, já que o registro do npm fica
- * bloqueado no ambiente onde o código é verificado, e uma dependência
- * nativa quebrada é difícil de depurar remotamente). Em vez disso, a MESMA
- * informação — quanto cada ativo/setor pesa na carteira — é mostrada como
- * uma barra segmentada + legenda com percentuais, sem depender de nada
- * além do React Native puro.
+ * feito com plotly (biblioteca de gráficos em Python). Mostra a MESMA
+ * informação — quanto cada ativo/setor pesa na carteira — como uma barra
+ * segmentada + legenda com percentuais, sem depender de nenhuma biblioteca
+ * de gráficos.
+ *
+ * 2026-09-03: a tela de Visão Geral passou a usar GraficoDonutAlocacao.tsx
+ * (um donut circular de verdade, com react-native-svg) em vez deste
+ * componente, a pedido de Diego. Este arquivo continua aqui — e continua
+ * funcionando normalmente — como alternativa mais simples (zero
+ * dependências) caso um dia seja preciso voltar atrás, ou para outra tela
+ * que prefira essa visualização.
  */
 export function GraficoAlocacao({ dados }: { dados: FatiaAlocacao[] }) {
   const total = dados.reduce((soma, item) => soma + item.valor, 0);

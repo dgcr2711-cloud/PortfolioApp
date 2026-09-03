@@ -16,20 +16,28 @@ novo, então ele sempre força uma consulta nova ao Yahoo Finance.
 
 from __future__ import annotations
 
+import json
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date, datetime
 from typing import Any
 
+import requests
 import streamlit as st
 import yfinance as yf
 
 from core.config import (
+    CACHE_TTL_COTACAO_HGBRASIL_SEGUNDOS,
     CACHE_TTL_COTACAO_SEGUNDOS,
     CACHE_TTL_DIVIDENDOS_SEGUNDOS,
     CACHE_TTL_NOME_EMPRESA_SEGUNDOS,
+    CACHE_TTL_TAXAS_HGBRASIL_SEGUNDOS,
+    CAMINHO_CHAVE_HGBRASIL,
     SUFIXO_B3,
     TICKER_IBOVESPA,
+    TIMEOUT_HGBRASIL_SEGUNDOS,
+    URL_HGBRASIL_FINANCE,
+    URL_HGBRASIL_STOCK_PRICE,
 )
 from core.numeros import numero_valido
 
@@ -335,3 +343,217 @@ def buscar_proximos_dividendos(tickers: list[str]) -> list[dict[str, Any]]:
 def limpar_cache_dividendos() -> None:
     """Força a próxima busca de 'Próximos Dividendos' a ignorar o cache — usado pelo botão dedicado na aba Proventos (separado do 'Atualizar Dados' de propósito, pra não deixar ele mais lento)."""
     _buscar_proximo_dividendo_yahoo.clear()
+
+
+# ==========================================================================
+# HG Brasil Finance (2026-09-03)
+#
+# Duas coisas novas, pedidas por Diego:
+#   1. Taxas SELIC/CDI — o Yahoo Finance não tem esse dado; a HG Brasil tem,
+#      no endpoint "geral" (disponível pra qualquer chave, inclusive grátis).
+#   2. Cotações de ações/FIIs como PLANO B — só usadas para os tickers em
+#      que o Yahoo Finance (fonte principal, já testada e gratuita) não
+#      conseguiu responder. Isso é de propósito: o endpoint de cotação
+#      individual da HG Brasil ("stock_price") exige um plano pago acima do
+#      gratuito — se a conta configurada não tiver esse plano, a API
+#      simplesmente devolve um erro, e o código abaixo trata isso como "sem
+#      resultado" (nunca quebra o app por causa disso, igual a qualquer
+#      outra fonte de dado externa neste projeto).
+#
+# Cache: "simples, por timestamp" (pedido explícito), em vez do decorador
+# @st.cache_data usado pelo Yahoo Finance acima — assim estas funções
+# também funcionam fora de um app Streamlit (ex: um script de segundo
+# plano), sem precisar de contexto nenhum do Streamlit.
+# ==========================================================================
+
+_cache_taxas_economicas: dict[str, Any] = {"valor": None, "buscado_em": 0.0}
+_cache_cotacoes_hgbrasil: dict[str, dict[str, Any]] = {}  # ticker -> {"valor": {...}, "buscado_em": float}
+
+
+def _obter_chave_hgbrasil() -> str | None:
+    """
+    Busca a chave da API HG Brasil, tentando nesta ordem (mesmo padrão de
+    core/cloud_sync.py para a chave do Firebase):
+      1. Arquivo local ~/.portfolio_b3_secrets/hgbrasil_api_key.json — uso
+         normal no seu PC, criado por "Configurar Chave HG Brasil.bat".
+      2. Variável de ambiente HGBRASIL_API_KEY — script de segundo plano
+         no GitHub Actions.
+      3. Secrets do Streamlit Cloud, seção [hgbrasil] — dashboard hospedado.
+    Devolve None sem erro nenhum se não encontrar em lugar nenhum (a HG
+    Brasil simplesmente não é usada, e o app continua funcionando 100%
+    normalmente só com o Yahoo Finance).
+    """
+    if CAMINHO_CHAVE_HGBRASIL.exists():
+        try:
+            with open(CAMINHO_CHAVE_HGBRASIL, "r", encoding="utf-8") as f:
+                conteudo = json.load(f)
+            chave = conteudo.get("api_key")
+            if chave:
+                return str(chave)
+        except (OSError, json.JSONDecodeError):
+            pass
+
+    import os
+
+    chave_ambiente = os.environ.get("HGBRASIL_API_KEY")
+    if chave_ambiente:
+        return chave_ambiente
+
+    try:
+        if "hgbrasil" in st.secrets:
+            chave_streamlit = st.secrets["hgbrasil"].get("api_key")
+            if chave_streamlit:
+                return str(chave_streamlit)
+    except Exception:
+        pass
+
+    return None
+
+
+def buscar_taxas_economicas() -> dict[str, Any] | None:
+    """
+    Busca as taxas SELIC e CDI mais recentes na HG Brasil (endpoint geral,
+    disponível para qualquer chave). Resultado cacheado por
+    CACHE_TTL_TAXAS_HGBRASIL_SEGUNDOS (essas taxas não mudam durante o dia).
+
+    Devolve None em qualquer situação em que não dê pra usar (chave não
+    configurada, sem internet, formato inesperado da resposta) — nunca
+    lança exceção, para nunca travar "🔄 Atualizar Dados" por causa disso.
+    """
+    agora = time.time()
+    if (
+        _cache_taxas_economicas["valor"] is not None
+        and (agora - _cache_taxas_economicas["buscado_em"]) < CACHE_TTL_TAXAS_HGBRASIL_SEGUNDOS
+    ):
+        return _cache_taxas_economicas["valor"]
+
+    chave = _obter_chave_hgbrasil()
+    if not chave:
+        return None
+
+    try:
+        resposta = requests.get(
+            URL_HGBRASIL_FINANCE, params={"key": chave}, timeout=TIMEOUT_HGBRASIL_SEGUNDOS
+        )
+        if resposta.status_code != 200:
+            return None
+        corpo = resposta.json()
+        taxas = (corpo.get("results") or {}).get("taxes")
+        if not taxas:
+            return None
+        # A HG Brasil devolve uma lista com a taxa mais recente primeiro —
+        # pegamos o primeiro item, mas de forma defensiva (funciona também
+        # se algum dia vier só um dict solto, sem lista).
+        taxa_mais_recente = taxas[0] if isinstance(taxas, list) else taxas
+        selic = numero_valido(taxa_mais_recente.get("selic"))
+        cdi = numero_valido(taxa_mais_recente.get("cdi"))
+        if selic is None and cdi is None:
+            return None
+        resultado = {
+            "selic": selic,
+            "cdi": cdi,
+            "data": taxa_mais_recente.get("date"),
+            "atualizadoEm": datetime.now().isoformat(),
+            "fonte": "HG Brasil Finance",
+        }
+    except Exception:
+        return None
+
+    _cache_taxas_economicas["valor"] = resultado
+    _cache_taxas_economicas["buscado_em"] = agora
+    return resultado
+
+
+def limpar_cache_taxas_economicas() -> None:
+    """Força a próxima busca de SELIC/CDI a ignorar o cache."""
+    _cache_taxas_economicas["valor"] = None
+    _cache_taxas_economicas["buscado_em"] = 0.0
+
+
+def _extrair_resultados_stock_price(corpo: dict[str, Any]) -> list[dict[str, Any]]:
+    """
+    A resposta de /finance/stock_price vem como um dict único em
+    results (uma consulta de 1 símbolo) OU uma lista de dicts em results
+    (vários símbolos de uma vez) — normaliza pros dois casos sempre virarem
+    uma lista.
+    """
+    resultados = corpo.get("results")
+    if resultados is None:
+        return []
+    if isinstance(resultados, list):
+        return resultados
+    if isinstance(resultados, dict):
+        # Pode vir como {"PETR4": {...}, "VALE3": {...}} OU como um único
+        # objeto de ativo direto (tem "symbol" na própria raiz) — os dois
+        # formatos já foram vistos em integrações parecidas com essa API.
+        if "symbol" in resultados:
+            return [resultados]
+        return list(resultados.values())
+    return []
+
+
+def buscar_cotacoes_hgbrasil(tickers: list[str]) -> dict[str, dict[str, Any]]:
+    """
+    Busca cotações de ações/FIIs na HG Brasil, numa ÚNICA requisição para
+    todos os tickers (economiza franquia da API, ao contrário de uma
+    chamada por ticker). Usado só como PLANO B — ver comentário no topo
+    desta seção — para os tickers que o Yahoo Finance não conseguiu buscar.
+
+    Devolve um dict {ticker: {preco, previousClose, nome, fonte,
+    atualizadoEm}} no mesmo formato de buscar_cotacao_ativo() — só com os
+    tickers que a HG Brasil conseguiu responder. Lista vazia/dict vazio em
+    qualquer falha (chave não configurada, sem internet, plano da conta não
+    inclui esse endpoint, formato inesperado) — nunca lança exceção.
+    """
+    if not tickers:
+        return {}
+
+    chave_cache = ",".join(sorted(tickers))
+    agora = time.time()
+    entrada_cache = _cache_cotacoes_hgbrasil.get(chave_cache)
+    if entrada_cache is not None and (agora - entrada_cache["buscado_em"]) < CACHE_TTL_COTACAO_HGBRASIL_SEGUNDOS:
+        return entrada_cache["valor"]
+
+    chave = _obter_chave_hgbrasil()
+    if not chave:
+        return {}
+
+    try:
+        resposta = requests.get(
+            URL_HGBRASIL_STOCK_PRICE,
+            params={"key": chave, "symbol": ",".join(tickers)},
+            timeout=TIMEOUT_HGBRASIL_SEGUNDOS,
+        )
+        if resposta.status_code != 200:
+            # Comum aqui: conta sem o plano necessário para este endpoint
+            # (ver comentário no topo da seção) — tratado como "sem
+            # resultado", não como erro.
+            return {}
+        corpo = resposta.json()
+        itens = _extrair_resultados_stock_price(corpo)
+
+        resultado: dict[str, dict[str, Any]] = {}
+        for item in itens:
+            simbolo = item.get("symbol")
+            preco = numero_valido(item.get("price"))
+            if not simbolo or preco is None:
+                continue
+            variacao = numero_valido(item.get("change_price"))
+            previous_close = (preco - variacao) if variacao is not None else None
+            resultado[simbolo] = {
+                "preco": preco,
+                "previousClose": previous_close,
+                "nome": item.get("name") or simbolo,
+                "fonte": "HG Brasil Finance",
+                "atualizadoEm": datetime.now().isoformat(),
+            }
+    except Exception:
+        return {}
+
+    _cache_cotacoes_hgbrasil[chave_cache] = {"valor": resultado, "buscado_em": agora}
+    return resultado
+
+
+def limpar_cache_cotacoes_hgbrasil() -> None:
+    """Força a próxima busca de cotações-plano-B na HG Brasil a ignorar o cache."""
+    _cache_cotacoes_hgbrasil.clear()

@@ -32,6 +32,8 @@ from __future__ import annotations
 import sys
 from datetime import date, datetime
 
+import requests
+
 
 class _FalsoDecoradorCacheData:
     """Substitui @st.cache_data(...) por um decorador que não faz cache
@@ -230,3 +232,226 @@ def test_atualizar_cotacoes_lista_vazia():
     novas, falhas = market_data.atualizar_cotacoes([], {"PETR4": {"preco": 1.0}})
     assert novas == {"PETR4": {"preco": 1.0}}
     assert falhas == []
+
+
+# ==========================================================================
+# HG Brasil Finance (2026-09-03) — troca requests.get e
+# market_data._obter_chave_hgbrasil por dublês, igual ao padrão já usado em
+# tests/test_b3_publico.py. Cada teste reseta os caches "simples por
+# timestamp" no início, pra um teste nunca depender da ordem de execução.
+# ==========================================================================
+
+class _RespostaHgBrasilFalsa:
+    def __init__(self, status_code=200, corpo=None):
+        self.status_code = status_code
+        self._corpo = corpo
+
+    def json(self):
+        return self._corpo
+
+
+def _resetar_caches_hgbrasil():
+    market_data._cache_taxas_economicas["valor"] = None
+    market_data._cache_taxas_economicas["buscado_em"] = 0.0
+    market_data._cache_cotacoes_hgbrasil.clear()
+
+
+def test_obter_chave_hgbrasil_le_do_arquivo_local(tmp_path=None):
+    import json
+
+    original = market_data.CAMINHO_CHAVE_HGBRASIL
+    import tempfile
+    from pathlib import Path
+
+    with tempfile.TemporaryDirectory() as pasta_tmp:
+        caminho = Path(pasta_tmp) / "hgbrasil_api_key.json"
+        caminho.write_text(json.dumps({"api_key": "chave-de-teste"}), encoding="utf-8")
+        market_data.CAMINHO_CHAVE_HGBRASIL = caminho
+        try:
+            assert market_data._obter_chave_hgbrasil() == "chave-de-teste"
+        finally:
+            market_data.CAMINHO_CHAVE_HGBRASIL = original
+
+
+def test_obter_chave_hgbrasil_none_quando_nao_configurada():
+    original = market_data.CAMINHO_CHAVE_HGBRASIL
+    import tempfile
+    from pathlib import Path
+
+    with tempfile.TemporaryDirectory() as pasta_tmp:
+        market_data.CAMINHO_CHAVE_HGBRASIL = Path(pasta_tmp) / "nao-existe.json"
+        try:
+            assert market_data._obter_chave_hgbrasil() is None
+        finally:
+            market_data.CAMINHO_CHAVE_HGBRASIL = original
+
+
+def test_buscar_taxas_economicas_sem_chave_devolve_none():
+    _resetar_caches_hgbrasil()
+    original = market_data._obter_chave_hgbrasil
+    market_data._obter_chave_hgbrasil = lambda: None
+    try:
+        assert market_data.buscar_taxas_economicas() is None
+    finally:
+        market_data._obter_chave_hgbrasil = original
+
+
+def test_buscar_taxas_economicas_caminho_feliz():
+    _resetar_caches_hgbrasil()
+    chave_original = market_data._obter_chave_hgbrasil
+    get_original = requests.get
+    market_data._obter_chave_hgbrasil = lambda: "chave-falsa"
+    requests.get = lambda *a, **kw: _RespostaHgBrasilFalsa(
+        200, {"results": {"taxes": [{"date": "2026-09-01", "selic": 14.25, "cdi": 14.15}]}}
+    )
+    try:
+        resultado = market_data.buscar_taxas_economicas()
+        assert resultado is not None
+        assert resultado["selic"] == 14.25
+        assert resultado["cdi"] == 14.15
+        assert resultado["data"] == "2026-09-01"
+        assert resultado["fonte"] == "HG Brasil Finance"
+    finally:
+        market_data._obter_chave_hgbrasil = chave_original
+        requests.get = get_original
+
+
+def test_buscar_taxas_economicas_usa_cache_na_segunda_chamada():
+    _resetar_caches_hgbrasil()
+    chave_original = market_data._obter_chave_hgbrasil
+    get_original = requests.get
+    chamadas = {"total": 0}
+
+    def get_fake(*a, **kw):
+        chamadas["total"] += 1
+        return _RespostaHgBrasilFalsa(200, {"results": {"taxes": [{"date": "2026-09-01", "selic": 14.25, "cdi": 14.15}]}})
+
+    market_data._obter_chave_hgbrasil = lambda: "chave-falsa"
+    requests.get = get_fake
+    try:
+        market_data.buscar_taxas_economicas()
+        market_data.buscar_taxas_economicas()
+        assert chamadas["total"] == 1  # segunda chamada veio do cache, não fez requisição de novo
+    finally:
+        market_data._obter_chave_hgbrasil = chave_original
+        requests.get = get_original
+
+
+def test_buscar_taxas_economicas_erro_de_rede_vira_none():
+    _resetar_caches_hgbrasil()
+    chave_original = market_data._obter_chave_hgbrasil
+    get_original = requests.get
+    market_data._obter_chave_hgbrasil = lambda: "chave-falsa"
+
+    def levanta(*a, **kw):
+        raise requests.exceptions.ConnectionError("sem internet (simulado)")
+
+    requests.get = levanta
+    try:
+        assert market_data.buscar_taxas_economicas() is None
+    finally:
+        market_data._obter_chave_hgbrasil = chave_original
+        requests.get = get_original
+
+
+def test_buscar_taxas_economicas_status_diferente_de_200_vira_none():
+    _resetar_caches_hgbrasil()
+    chave_original = market_data._obter_chave_hgbrasil
+    get_original = requests.get
+    market_data._obter_chave_hgbrasil = lambda: "chave-falsa"
+    requests.get = lambda *a, **kw: _RespostaHgBrasilFalsa(403, None)
+    try:
+        assert market_data.buscar_taxas_economicas() is None
+    finally:
+        market_data._obter_chave_hgbrasil = chave_original
+        requests.get = get_original
+
+
+def test_buscar_cotacoes_hgbrasil_lista_vazia_nao_faz_requisicao():
+    _resetar_caches_hgbrasil()
+    get_original = requests.get
+    requests.get = lambda *a, **kw: (_ for _ in ()).throw(AssertionError("não deveria chamar requests.get"))
+    try:
+        assert market_data.buscar_cotacoes_hgbrasil([]) == {}
+    finally:
+        requests.get = get_original
+
+
+def test_buscar_cotacoes_hgbrasil_sem_chave_devolve_vazio():
+    _resetar_caches_hgbrasil()
+    original = market_data._obter_chave_hgbrasil
+    market_data._obter_chave_hgbrasil = lambda: None
+    try:
+        assert market_data.buscar_cotacoes_hgbrasil(["PETR4"]) == {}
+    finally:
+        market_data._obter_chave_hgbrasil = original
+
+
+def test_buscar_cotacoes_hgbrasil_caminho_feliz_varios_tickers():
+    _resetar_caches_hgbrasil()
+    chave_original = market_data._obter_chave_hgbrasil
+    get_original = requests.get
+    market_data._obter_chave_hgbrasil = lambda: "chave-falsa"
+    requests.get = lambda *a, **kw: _RespostaHgBrasilFalsa(200, {"results": [
+        {"symbol": "PETR4", "name": "Petrobrás", "price": 29.45, "change_price": 0.50},
+        {"symbol": "VALE3", "name": "Vale", "price": 60.10, "change_price": -0.30},
+    ]})
+    try:
+        resultado = market_data.buscar_cotacoes_hgbrasil(["PETR4", "VALE3"])
+        assert resultado["PETR4"]["preco"] == 29.45
+        assert round(resultado["PETR4"]["previousClose"], 2) == 28.95
+        assert resultado["PETR4"]["fonte"] == "HG Brasil Finance"
+        assert resultado["VALE3"]["preco"] == 60.10
+    finally:
+        market_data._obter_chave_hgbrasil = chave_original
+        requests.get = get_original
+
+
+def test_buscar_cotacoes_hgbrasil_resultado_unico_como_dict_direto():
+    """Formato alternativo já visto em integrações parecidas: 1 símbolo só, "results" é um único objeto (com "symbol" na raiz), não uma lista."""
+    _resetar_caches_hgbrasil()
+    chave_original = market_data._obter_chave_hgbrasil
+    get_original = requests.get
+    market_data._obter_chave_hgbrasil = lambda: "chave-falsa"
+    requests.get = lambda *a, **kw: _RespostaHgBrasilFalsa(200, {"results": {"symbol": "PETR4", "name": "Petrobrás", "price": 29.45}})
+    try:
+        resultado = market_data.buscar_cotacoes_hgbrasil(["PETR4"])
+        assert resultado["PETR4"]["preco"] == 29.45
+    finally:
+        market_data._obter_chave_hgbrasil = chave_original
+        requests.get = get_original
+
+
+def test_buscar_cotacoes_hgbrasil_status_diferente_de_200_devolve_vazio():
+    """Caso comum: conta sem o plano necessário para o endpoint de cotação individual."""
+    _resetar_caches_hgbrasil()
+    chave_original = market_data._obter_chave_hgbrasil
+    get_original = requests.get
+    market_data._obter_chave_hgbrasil = lambda: "chave-falsa"
+    requests.get = lambda *a, **kw: _RespostaHgBrasilFalsa(402, None)
+    try:
+        assert market_data.buscar_cotacoes_hgbrasil(["PETR4"]) == {}
+    finally:
+        market_data._obter_chave_hgbrasil = chave_original
+        requests.get = get_original
+
+
+def test_buscar_cotacoes_hgbrasil_usa_cache_no_mesmo_conjunto_de_tickers():
+    _resetar_caches_hgbrasil()
+    chave_original = market_data._obter_chave_hgbrasil
+    get_original = requests.get
+    chamadas = {"total": 0}
+
+    def get_fake(*a, **kw):
+        chamadas["total"] += 1
+        return _RespostaHgBrasilFalsa(200, {"results": [{"symbol": "PETR4", "name": "Petrobrás", "price": 29.45}]})
+
+    market_data._obter_chave_hgbrasil = lambda: "chave-falsa"
+    requests.get = get_fake
+    try:
+        market_data.buscar_cotacoes_hgbrasil(["PETR4"])
+        market_data.buscar_cotacoes_hgbrasil(["PETR4"])
+        assert chamadas["total"] == 1
+    finally:
+        market_data._obter_chave_hgbrasil = chave_original
+        requests.get = get_original

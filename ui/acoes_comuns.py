@@ -59,6 +59,27 @@ def atualizar_dados(dados: dict, salvar) -> None:
         dados["cotacoes"] = novas_cotacoes
         ibov = market_data.buscar_cotacao_ibovespa()
 
+    # HG Brasil (2026-09-03) — plano B só para os tickers que o Yahoo
+    # Finance não conseguiu, e fonte das taxas SELIC/CDI (que o Yahoo não
+    # tem). Ver core/market_data.py para o porquê dessa divisão de papéis.
+    # Se a chave da HG Brasil não estiver configurada (caso normal, até
+    # Diego configurá-la), as duas chamadas abaixo só devolvem "sem
+    # resultado" silenciosamente — nada muda no comportamento de hoje.
+    cobertas_pela_hgbrasil: list[str] = []
+    if falhas:
+        cotacoes_hgbrasil = market_data.buscar_cotacoes_hgbrasil(falhas)
+        for ticker, cotacao in cotacoes_hgbrasil.items():
+            dados["cotacoes"][ticker] = cotacao
+            cobertas_pela_hgbrasil.append(ticker)
+        falhas = [t for t in falhas if t not in cotacoes_hgbrasil]
+
+    taxas_economicas = market_data.buscar_taxas_economicas()
+    if taxas_economicas is not None:
+        dados["taxasEconomicas"] = taxas_economicas
+    # Se taxas_economicas vier None (chave não configurada, ou falha
+    # passageira), mantém o último valor bom conhecido em
+    # dados["taxasEconomicas"] — de propósito, não apaga o que já tinha.
+
     _registrar_snapshot(dados, ibov)
 
     # Alerta de preço-alvo por WhatsApp (core/notificacoes_whatsapp.py) —
@@ -97,16 +118,20 @@ def atualizar_dados(dados: dict, salvar) -> None:
         plural = "s" if alertas_notificados_agora > 1 else ""
         sufixo_celular += f" 💬 {alertas_notificados_agora} alerta{plural} de preço enviado{plural} por WhatsApp."
 
+    sufixo_hgbrasil = ""
+    if cobertas_pela_hgbrasil:
+        sufixo_hgbrasil = f" 🔁 {len(cobertas_pela_hgbrasil)} ativo(s) resolvido(s) pela HG Brasil (plano B): {', '.join(cobertas_pela_hgbrasil)}."
+
     if falhas:
         st.session_state["status_cotacoes"] = (
             f"Atualizado às {agora}. {len(tickers) - len(falhas)} de {len(tickers)} ativo(s) ok, "
             f"mesmo após nova tentativa. Sem dados para: {', '.join(falhas)}. "
             "É comum ser passageiro (o Yahoo Finance às vezes recusa uma consulta no meio de uma rajada) "
-            "— clique em \"🔄 Atualizar Dados\" de novo em alguns segundos." + sufixo_celular
+            "— clique em \"🔄 Atualizar Dados\" de novo em alguns segundos." + sufixo_hgbrasil + sufixo_celular
         )
         st.session_state["status_cotacoes_falhou"] = True
     else:
-        st.session_state["status_cotacoes"] = f"Dados atualizados às {agora} — Yahoo Finance (yfinance)." + sufixo_celular
+        st.session_state["status_cotacoes"] = f"Dados atualizados às {agora} — Yahoo Finance (yfinance)." + sufixo_hgbrasil + sufixo_celular
         st.session_state["status_cotacoes_falhou"] = False
 
     # Proventos anunciados pela B3 (aba Proventos → Mapa de Dividendos e

@@ -10,6 +10,13 @@ if not exist "node_modules\@react-native-async-storage" (
     echo.
 )
 
+if not exist "node_modules\react-native-svg" (
+    echo Nova funcionalidade instalada ^(grafico de alocacao em rosca^) -
+    echo baixando uma biblioteca nova, so acontece uma vez, aguarde...
+    call npm install
+    echo.
+)
+
 echo ============================================================
 echo  Abrindo em modo "de qualquer lugar" (tunel) - assim o celular
 echo  NAO precisa estar no mesmo Wi-Fi do computador pra funcionar.

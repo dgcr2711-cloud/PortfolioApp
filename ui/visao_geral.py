@@ -27,6 +27,8 @@ def render(dados: dict, ocultar_valores: bool) -> None:
     st.title("Visão Geral")
     st.caption("Resumo de todos os recursos numa tela só — para detalhes, abra a aba específica")
 
+    _exibir_taxas_economicas(dados.get("taxasEconomicas"))
+
     posicoes = calc.calcular_posicoes_completas(dados["compras"], dados["eventos"], dados["cotacoes"])
     totais = calc.totais_carteira(posicoes)
     proventos_12m = calc.proventos_12m(dados["proventos"])
@@ -50,6 +52,13 @@ def render(dados: dict, ocultar_valores: bool) -> None:
     cor_lucro = "#34d399" if totais["lucro"] >= 0 else "#fb7185"
     sinal = "+" if totais["lucro"] >= 0 else ""
 
+    # Os cards "Patrimônio Atual" e "Resultado" abaixo já refletem
+    # automaticamente qualquer cotação vinda da HG Brasil (2026-09-03):
+    # `totais` vem de `posicoes`, calculado a partir de dados["cotacoes"] —
+    # o mesmo dicionário onde ui/acoes_comuns.py::atualizar_dados() grava
+    # tanto os preços do Yahoo Finance quanto os da HG Brasil (usada como
+    # plano B). Não existe uma cotação "HG Brasil" separada para ler aqui;
+    # é a mesma fonte de sempre, só com mais uma origem possível por trás.
     render_cards([
         card_kpi_html(
             "Patrimônio Atual", formatar_moeda_priv(totais["total_atual"], ocultar_valores),
@@ -202,3 +211,24 @@ def _render_diagnostico_carteira(dados: dict, posicoes: list[dict]) -> None:
 
     with col_dir:
         st.markdown(painel_diagnostico_html("Desempenho &amp; Qualidade Fundamentalista", linhas_desempenho, selo_fund), unsafe_allow_html=True)
+
+
+def _exibir_taxas_economicas(taxas: dict | None) -> None:
+    """
+    Linha compacta com a SELIC e o CDI mais recentes (HG Brasil,
+    2026-09-03) — fica logo abaixo do título, sem ocupar um card inteiro na
+    grade (mesma lógica de otimização de espaço já aplicada ao resto da
+    tela). Não mostra nada se a chave da HG Brasil ainda não foi
+    configurada (taxas vazio) — não é um recurso obrigatório.
+    """
+    if not taxas:
+        return
+    partes = []
+    if taxas.get("selic") is not None:
+        partes.append(f"Selic: {formatar_pct(taxas['selic'])}")
+    if taxas.get("cdi") is not None:
+        partes.append(f"CDI: {formatar_pct(taxas['cdi'])}")
+    if not partes:
+        return
+    data_taxa = taxas.get("data") or ""
+    st.caption(f"📈 {' • '.join(partes)}" + (f" (referência: {data_taxa})" if data_taxa else "") + " — HG Brasil Finance")

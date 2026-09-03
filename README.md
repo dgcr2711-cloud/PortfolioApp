@@ -173,14 +173,40 @@ em si continua funcionando normalmente).
 > da versão anterior a esta mudança — o código continua no projeto, só não
 > está mais em uso.
 
-### 8. (Opcional) Hospedar o dashboard na nuvem, acessível de qualquer lugar
+### 8. (Opcional) Taxas SELIC/CDI e cotações de reforço via HG Brasil Finance
+
+**Novidade (2026-09-03).** O app pode mostrar a SELIC e o CDI mais
+recentes na aba Visão Geral, e usar a API da HG Brasil como plano B para
+cotações de ações/FIIs quando o Yahoo Finance falhar para algum ticker —
+ver `core/market_data.py`. Essa etapa é 100% opcional: sem configurar, o
+app continua funcionando exatamente como hoje, só sem essas duas coisas.
+
+1. Se ainda não tiver, crie uma conta em
+   [console.hgbrasil.com](https://console.hgbrasil.com/) e copie a chave
+   (token) da API "Finance".
+2. Dê um duplo-clique em **"Configurar Chave HG Brasil.bat"** e cole a
+   chave quando pedido. Ela fica salva em
+   `C:\Users\SeuUsuario\.portfolio_b3_secrets\hgbrasil_api_key.json` — a
+   mesma pasta oculta, fora do projeto, onde já ficam as outras chaves.
+3. Se você também hospeda o dashboard na nuvem (próximo passo abaixo), rode
+   "Gerar Secrets Streamlit.bat" de novo e cole o resultado atualizado nos
+   Secrets do site.
+
+Nota sobre o plano da sua conta HG Brasil: o endpoint de cotação
+individual (usado só como plano B, quando o Yahoo Finance falha) exige um
+plano pago acima do gratuito — se a sua conta for gratuita, o app
+simplesmente ignora esse reforço (sem erro nenhum) e continua contando
+100% com o Yahoo Finance para preços, como sempre. As taxas SELIC/CDI, por
+outro lado, funcionam com qualquer chave, inclusive gratuita.
+
+### 9. (Opcional) Hospedar o dashboard na nuvem, acessível de qualquer lugar
 
 **Novidade (2026-08-30).** Além de rodar no seu PC, o dashboard pode ficar
 hospedado de graça no Streamlit Community Cloud, com um link acessível de
 qualquer navegador (celular incluso), sem precisar do seu PC ligado. Veja
 o passo a passo completo em `README_HOSPEDAGEM.md`.
 
-### 9. (Opcional) Verificar alertas de preço em segundo plano, mesmo com o PC desligado
+### 10. (Opcional) Verificar alertas de preço em segundo plano, mesmo com o PC desligado
 
 **Novidade (2026-08-31).** Além do alerta que dispara quando você clica em
 "🔄 Atualizar Dados", um robô pode rodar sozinho de hora em hora (durante o
@@ -200,7 +226,7 @@ PortfolioApp/
 │   ├── data_store.py      # carregar/salvar/exportar/importar os dados (local + Firestore)
 │   ├── cloud_sync.py      # sincronização com o Firestore (celular + dashboard hospedado)
 │   ├── calculations.py    # preço médio, preço teto, IR, TWR, FCD...
-│   ├── market_data.py     # busca de cotações via yfinance (com cache)
+│   ├── market_data.py     # busca de cotações via yfinance (com cache) + SELIC/CDI e reforço via HG Brasil
 │   ├── notificacoes_whatsapp.py  # alerta de preço-alvo por WhatsApp (opcional)
 │   ├── notificacoes_email.py  # alerta por e-mail (versão anterior, sem uso ativo)
 │   └── formatting.py      # formatação de R$ e % no padrão brasileiro

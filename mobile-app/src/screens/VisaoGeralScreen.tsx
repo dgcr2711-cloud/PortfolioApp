@@ -3,7 +3,7 @@ import { ActivityIndicator, RefreshControl, ScrollView, StyleSheet, Text, View }
 import { usePortfolioSnapshot } from '../hooks/usePortfolioSnapshot';
 import { useEspacoTopo } from '../hooks/useEspacoTopo';
 import { CardKpi } from '../components/CardKpi';
-import { GraficoAlocacao } from '../components/GraficoAlocacao';
+import { GraficoDonutAlocacao } from '../components/GraficoDonutAlocacao';
 import { SegmentedControl } from '../components/SegmentedControl';
 import { BotaoOcultarValores } from '../components/BotaoOcultarValores';
 import { useOcultarValores } from '../contexts/OcultarValoresContext';
@@ -104,7 +104,11 @@ export function VisaoGeralScreen() {
           aoSelecionar={setAgruparPor}
         />
         <View style={estilos.espacoGrafico}>
-          <GraficoAlocacao dados={agruparPor === 'ativo' ? alocacaoPorAtivo : alocacaoPorSetor} />
+          <GraficoDonutAlocacao
+            dados={agruparPor === 'ativo' ? alocacaoPorAtivo : alocacaoPorSetor}
+            rotuloCentral="Patrimônio"
+            valorCentral={formatarMoedaPriv(totais.totalAtual, ocultarValores)}
+          />
         </View>
       </View>
 

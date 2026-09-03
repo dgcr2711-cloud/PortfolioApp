@@ -100,24 +100,28 @@ def _com_caminhos_isolados(
     conteudo_email: dict | None,
     conteudo_whatsapp: dict | None = None,
     conteudo_login: dict | None = None,
+    conteudo_hgbrasil: dict | None = None,
 ):
     """
     Redireciona gerador.CAMINHO_CHAVE_FIREBASE, gerador.CAMINHO_CONFIG_EMAIL,
-    gerador.CAMINHO_CONFIG_WHATSAPP e gerador.CAMINHO_CONFIG_LOGIN pra
-    arquivos temporários (criando-os só se o conteúdo correspondente não for
-    None) durante a chamada de `testar`, e sempre restaura os valores
-    originais — mesmo se `testar` lançar.
+    gerador.CAMINHO_CONFIG_WHATSAPP, gerador.CAMINHO_CONFIG_LOGIN e
+    gerador.CAMINHO_CHAVE_HGBRASIL pra arquivos temporários (criando-os só
+    se o conteúdo correspondente não for None) durante a chamada de
+    `testar`, e sempre restaura os valores originais — mesmo se `testar`
+    lançar.
     """
     chave_original = gerador.CAMINHO_CHAVE_FIREBASE
     email_original = gerador.CAMINHO_CONFIG_EMAIL
     whatsapp_original = gerador.CAMINHO_CONFIG_WHATSAPP
     login_original = gerador.CAMINHO_CONFIG_LOGIN
+    hgbrasil_original = gerador.CAMINHO_CHAVE_HGBRASIL
     with tempfile.TemporaryDirectory() as pasta_tmp:
         pasta = Path(pasta_tmp)
         caminho_chave = pasta / "firebase-service-account.json"
         caminho_email = pasta / "email_alertas.json"
         caminho_whatsapp = pasta / "whatsapp_alertas.json"
         caminho_login = pasta / "login_site.json"
+        caminho_hgbrasil = pasta / "hgbrasil_api_key.json"
         if conteudo_firebase is not None:
             caminho_chave.write_text(json.dumps(conteudo_firebase), encoding="utf-8")
         if conteudo_email is not None:
@@ -126,11 +130,14 @@ def _com_caminhos_isolados(
             caminho_whatsapp.write_text(json.dumps(conteudo_whatsapp), encoding="utf-8")
         if conteudo_login is not None:
             caminho_login.write_text(json.dumps(conteudo_login), encoding="utf-8")
+        if conteudo_hgbrasil is not None:
+            caminho_hgbrasil.write_text(json.dumps(conteudo_hgbrasil), encoding="utf-8")
 
         gerador.CAMINHO_CHAVE_FIREBASE = caminho_chave
         gerador.CAMINHO_CONFIG_EMAIL = caminho_email
         gerador.CAMINHO_CONFIG_WHATSAPP = caminho_whatsapp
         gerador.CAMINHO_CONFIG_LOGIN = caminho_login
+        gerador.CAMINHO_CHAVE_HGBRASIL = caminho_hgbrasil
         try:
             testar()
         finally:
@@ -138,6 +145,7 @@ def _com_caminhos_isolados(
             gerador.CAMINHO_CONFIG_EMAIL = email_original
             gerador.CAMINHO_CONFIG_WHATSAPP = whatsapp_original
             gerador.CAMINHO_CONFIG_LOGIN = login_original
+            gerador.CAMINHO_CHAVE_HGBRASIL = hgbrasil_original
 
 
 def test_gerar_texto_secrets_sem_nenhum_arquivo_configurado_avisa_e_nao_quebra():
@@ -147,12 +155,28 @@ def test_gerar_texto_secrets_sem_nenhum_arquivo_configurado_avisa_e_nao_quebra()
         assert "[email_alertas]" not in texto
         assert "[whatsapp_alertas]" not in texto
         assert "[login_site" not in texto
+        assert "[hgbrasil]" not in texto
         assert "Nenhuma chave do Firebase encontrada" in texto
         assert "Nenhuma configuração de e-mail encontrada" in texto
         assert "Nenhuma configuração de WhatsApp encontrada" in texto
         assert "Nenhum login configurado" in texto
+        assert "Nenhuma chave da HG Brasil encontrada" in texto
 
     _com_caminhos_isolados(testar, conteudo_firebase=None, conteudo_email=None, conteudo_whatsapp=None, conteudo_login=None)
+
+
+def test_gerar_texto_secrets_com_hgbrasil_inclui_secao_hgbrasil():
+    def testar():
+        texto = gerador.gerar_texto_secrets()
+        assert "[hgbrasil]" in texto
+        assert 'api_key = "chave-hgbrasil-falsa"' in texto
+        assert "Nenhuma chave da HG Brasil encontrada" not in texto
+
+    _com_caminhos_isolados(
+        testar,
+        conteudo_firebase=None, conteudo_email=None, conteudo_whatsapp=None, conteudo_login=None,
+        conteudo_hgbrasil={"api_key": "chave-hgbrasil-falsa"},
+    )
 
 
 def test_gerar_texto_secrets_com_login_inclui_secao_login_site():
@@ -183,7 +207,7 @@ def test_gerar_texto_secrets_com_login_inclui_secao_login_site():
     _com_caminhos_isolados(testar, conteudo_firebase=None, conteudo_email=None, conteudo_whatsapp=None, conteudo_login=login_falso)
 
 
-def test_gerar_texto_secrets_com_todos_os_arquivos_monta_as_tres_secoes():
+def test_gerar_texto_secrets_com_todos_os_arquivos_monta_todas_as_secoes():
     chave_falsa = {
         "type": "service_account",
         "project_id": "meu-projeto",
@@ -192,6 +216,7 @@ def test_gerar_texto_secrets_com_todos_os_arquivos_monta_as_tres_secoes():
     }
     email_falso = {"remetente": "voce@gmail.com", "senha_app": "abcd efgh", "destinatario": "voce@gmail.com"}
     whatsapp_falso = {"numero": "+5511999999999", "apikey": "123456"}
+    hgbrasil_falso = {"api_key": "chave-hgbrasil-falsa"}
 
     def testar():
         texto = gerador.gerar_texto_secrets()
@@ -208,9 +233,17 @@ def test_gerar_texto_secrets_com_todos_os_arquivos_monta_as_tres_secoes():
         assert 'numero = "+5511999999999"' in texto
         assert 'apikey = "123456"' in texto
 
-        assert "Nenhuma" not in texto  # nenhum aviso de arquivo faltando, já que os três existem
+        assert "[hgbrasil]" in texto
+        assert 'api_key = "chave-hgbrasil-falsa"' in texto
 
-    _com_caminhos_isolados(testar, conteudo_firebase=chave_falsa, conteudo_email=email_falso, conteudo_whatsapp=whatsapp_falso)
+        assert "Nenhuma" not in texto  # nenhum aviso de arquivo faltando (firebase/email/whatsapp/hgbrasil existem)
+        assert "Nenhum login configurado" in texto  # login não foi passado neste teste — continua faltando, de propósito
+
+    _com_caminhos_isolados(
+        testar,
+        conteudo_firebase=chave_falsa, conteudo_email=email_falso, conteudo_whatsapp=whatsapp_falso,
+        conteudo_hgbrasil=hgbrasil_falso,
+    )
 
 
 def test_gerar_texto_secrets_so_com_email_nao_inclui_as_outras_secoes():

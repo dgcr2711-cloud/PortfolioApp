@@ -90,6 +90,12 @@ def estrutura_padrao() -> dict[str, Any]:
         # e atualizar manualmente quando quiser.
         "atualizarAutomaticamenteAoAbrir": True,
         "exportadoEm": None,
+        # Taxas SELIC/CDI mais recentes, buscadas na API da HG Brasil
+        # (core/market_data.py::buscar_taxas_economicas — 2026-09-03).
+        # {} enquanto a chave da HG Brasil não estiver configurada, ou se a
+        # última busca falhou (nesse caso o último valor bom conhecido é
+        # mantido, nunca apagado por uma falha passageira).
+        "taxasEconomicas": {},
     }
 
 
