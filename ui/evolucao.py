@@ -40,8 +40,8 @@ def render(dados: dict, salvar) -> None:
     )
     comparativo = calc.twr_vs_ibovespa(historico)
     if comparativo:
-        cor_cart = "#34d399" if comparativo["rent_carteira_pct"] >= 0 else "#fb7185"
-        cor_ibov = "#34d399" if comparativo["rent_ibov_pct"] >= 0 else "#fb7185"
+        cor_cart = "#34d399" if comparativo["rent_carteira_pct"] >= 0 else "#F87171"
+        cor_ibov = "#34d399" if comparativo["rent_ibov_pct"] >= 0 else "#F87171"
         render_cards([
             card_kpi_html(
                 "Sua carteira no período (TWR aprox.)",

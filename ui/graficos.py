@@ -23,7 +23,7 @@ import plotly.graph_objects as go
 
 from core.formatting import formatar_data_br
 
-PALETA_ALOCACAO = ["#34d399", "#38bdf8", "#fbbf24", "#a78bfa", "#fb7185", "#22d3ee", "#f472b6", "#a3e635", "#fb923c", "#94a3b8"]
+PALETA_ALOCACAO = ["#34d399", "#38bdf8", "#fbbf24", "#a78bfa", "#F87171", "#22d3ee", "#f472b6", "#a3e635", "#fb923c", "#94a3b8"]
 
 COR_LINHA_ATIVO = "#38bdf8"
 COR_PRECO_TETO = "#fbbf24"

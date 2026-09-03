@@ -44,8 +44,8 @@ def render(dados: dict, ocultar_valores: bool, salvar) -> None:
     posicoes = calc.calcular_posicoes_completas(dados["compras"], dados["eventos"], dados["cotacoes"])
     totais = calc.totais_carteira(posicoes)
 
-    cor_lucro = "#34d399" if totais["lucro"] >= 0 else "#fb7185"
-    cor_variacao = "#34d399" if totais["variacao_dia_reais"] >= 0 else "#fb7185"
+    cor_lucro = "#34d399" if totais["lucro"] >= 0 else "#F87171"
+    cor_variacao = "#34d399" if totais["variacao_dia_reais"] >= 0 else "#F87171"
     sinal_lucro = "+" if totais["lucro"] >= 0 else ""
     sinal_var = "+" if totais["variacao_dia_reais"] >= 0 else ""
 
@@ -204,7 +204,7 @@ def _secao_rebalanceamento(dados: dict, ocultar_valores: bool, posicoes: list[di
 
     linhas = []
     for d in desvios:
-        cor = "#34d399" if d.desvio_pp >= 0 else "#fb7185"
+        cor = "#34d399" if d.desvio_pp >= 0 else "#F87171"
         sinal = "+" if d.desvio_pp >= 0 else ""
         badge = badge_html("⚠️ Rebalancear", "warn") if d.alerta else badge_html("Dentro da meta", "ok")
         acao = "Vender" if d.valor_ajuste < 0 else "Comprar"
@@ -288,7 +288,7 @@ def _tabela_posicoes_html(lista_ativos: list[dict], ocultar_valores: bool) -> No
             qtd_html = mascarar_qtd(a["qtd_total"], ocultar_valores)
             preco_medio_html = formatar_moeda_priv(a["preco_medio_ponderado"], ocultar_valores)
             total_atual_html = formatar_moeda_priv(a["atual"], ocultar_valores)
-            cor = "#34d399" if a["lucro_reais"] >= 0 else "#fb7185"
+            cor = "#34d399" if a["lucro_reais"] >= 0 else "#F87171"
             sinal = "+" if a["lucro_reais"] >= 0 else ""
             resultado_html = (
                 f'<span style="color:{cor};font-weight:600">{sinal}{formatar_moeda_priv(a["lucro_reais"], ocultar_valores)} '
@@ -322,7 +322,7 @@ def _tabela_posicoes_html(lista_ativos: list[dict], ocultar_valores: bool) -> No
             margem_pm_html = '<span class="texto-apagado">— sem preço teto</span>' if not a["eh_alvo"] else '<span class="texto-apagado">—</span>'
         else:
             positivo = a["margem_vs_preco_medio"] >= 0
-            cor = "#34d399" if positivo else "#fb7185"
+            cor = "#34d399" if positivo else "#F87171"
             sinal = "+" if positivo else ""
             margem_pm_html = f'<span style="color:{cor};font-weight:600">{"✅" if positivo else "⚠️"} {sinal}{formatar_pct(a["margem_vs_preco_medio"])}</span>'
 

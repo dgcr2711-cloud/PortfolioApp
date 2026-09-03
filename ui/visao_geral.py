@@ -22,6 +22,7 @@ from core.formatting import formatar_moeda_priv, formatar_numero, formatar_pct
 from ui.ativos import montar_lista_ativos
 from ui.graficos import grafico_alocacao, grafico_evolucao_patrimonial
 from ui.styles import (
+    aviso_privacidade_html,
     badge_alerta,
     badge_indicacao,
     card_kpi_html,
@@ -57,7 +58,7 @@ def render(dados: dict, ocultar_valores: bool) -> None:
     n_carteira = sum(1 for a in lista_ativos if not a["eh_alvo"])
     n_alvo = sum(1 for a in lista_ativos if a["eh_alvo"])
 
-    cor_lucro = "#34d399" if totais["lucro"] >= 0 else "#fb7185"
+    cor_lucro = "#34d399" if totais["lucro"] >= 0 else "#F87171"
     sinal = "+" if totais["lucro"] >= 0 else ""
 
     # Os cards "Patrimônio Atual" e "Resultado" abaixo já refletem
@@ -67,6 +68,13 @@ def render(dados: dict, ocultar_valores: bool) -> None:
     # tanto os preços do Yahoo Finance quanto os da HG Brasil (usada como
     # plano B). Não existe uma cotação "HG Brasil" separada para ler aqui;
     # é a mesma fonte de sempre, só com mais uma origem possível por trás.
+    # Divulgação progressiva também dentro da própria linha de KPIs
+    # (2026-09-03, pedido do Diego): os 3 números essenciais — Patrimônio,
+    # Resultado (R$ e %) e Proventos — ficam em destaque, tamanho normal;
+    # os 2 secundários (contagens de alertas/ativos, que não são um valor
+    # financeiro em si) ficam numa segunda linha menor, ainda sempre
+    # visíveis (não é preciso abrir nada pra vê-los), só sem competir
+    # visualmente com o que mais importa.
     render_cards([
         card_kpi_html(
             "Patrimônio Atual", formatar_moeda_priv(totais["total_atual"], ocultar_valores),
@@ -80,11 +88,13 @@ def render(dados: dict, ocultar_valores: bool) -> None:
             cor_sub=cor_lucro,
         ),
         card_kpi_html("Proventos (12m)", formatar_moeda_priv(proventos_12m, ocultar_valores)),
-        card_kpi_html("Alertas Atingidos", f"{atingidos} / {len(alertas)}"),
-        card_kpi_html("Ativos Monitorados", f"{n_carteira} na carteira + {n_alvo} alvo(s)"),
+    ])
+    render_cards([
+        card_kpi_html("Alertas Atingidos", f"{atingidos} / {len(alertas)}", compacto=True),
+        card_kpi_html("Ativos Monitorados", f"{n_carteira} na carteira + {n_alvo} alvo(s)", compacto=True),
     ])
 
-    _render_graficos_resumo(dados, posicoes)
+    _render_graficos_resumo(dados, posicoes, ocultar_valores)
 
     # Os dois blocos mais densos da tela — diagnóstico avançado e a tabela
     # completa de ativos — ficam recolhidos por padrão (2026-09-03,
@@ -149,13 +159,22 @@ def _render_tabela_ativos(lista_ativos: list[dict]) -> None:
     st.markdown(tabela_html, unsafe_allow_html=True)
 
 
-def _render_graficos_resumo(dados: dict, posicoes: list[dict]) -> None:
+def _render_graficos_resumo(dados: dict, posicoes: list[dict], ocultar_valores: bool) -> None:
     """
     Os dois gráficos que faltavam na Visão Geral (pedido do Diego,
     2026-09-03): alocação (donut, igual ao de 📈 Carteira) e evolução
     patrimonial (igual ao de 📊 Evolução) lado a lado, em versão compacta —
     aqui é só o resumo rápido; os detalhes (agrupar por setor, comparar com
     o Ibovespa, Beta/Sharpe) continuam nas abas específicas.
+
+    Privacidade ("ocultar valores", 2026-09-03, pedido do Diego): o donut
+    de Alocação já mostra só Ticker + percentual (nunca um valor em R$),
+    então não precisa de nenhum tratamento especial. Já a Evolução
+    Patrimonial é uma série histórica em R$ — mascarar só os números com
+    "••••" não bastaria, porque a FORMA da curva ainda revelaria a
+    trajetória do patrimônio. Por isso, com `ocultar_valores` ativo, o
+    gráfico inteiro é substituído por um aviso — a informação some de
+    verdade, não só fica mascarada.
     """
     col_alocacao, col_evolucao = st.columns(2)
 
@@ -177,7 +196,12 @@ def _render_graficos_resumo(dados: dict, posicoes: list[dict]) -> None:
         st.subheader("Evolução Patrimonial")
         historico = dados.get("historico", [])
         with st.container(border=True):
-            if not historico:
+            if ocultar_valores:
+                st.markdown(
+                    aviso_privacidade_html("Evolução patrimonial oculta — desative \"ocultar valores\" para visualizar."),
+                    unsafe_allow_html=True,
+                )
+            elif not historico:
                 st.caption("Ainda não há snapshots suficientes — atualize as cotações em dias diferentes para ver a evolução aqui.")
             else:
                 fig = grafico_evolucao_patrimonial(historico, altura=260, legenda=False)

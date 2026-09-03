@@ -14,7 +14,16 @@ from __future__ import annotations
 import streamlit as st
 import streamlit.components.v1 as components
 
-from core.config import COR_DESTAQUE, COR_FUNDO_CARD, COR_INFO, COR_NEGATIVO, COR_NEUTRO, COR_POSITIVO
+from core.config import (
+    COR_DESTAQUE,
+    COR_FUNDO_CARD,
+    COR_INFO,
+    COR_NEGATIVO,
+    COR_NEUTRO,
+    COR_POSITIVO,
+    COR_TEXTO_PRIMARIO,
+    COR_TEXTO_SECUNDARIO,
+)
 
 CSS_GLOBAL = f"""
 <style>
@@ -60,14 +69,39 @@ div[data-testid="stCaptionContainer"] {{ margin-bottom: 0.1rem !important; }}
     background: {COR_DESTAQUE};
 }}
 .card-kpi .rotulo {{
-    font-size: 11px; font-weight: 600; color: #9ca3af;
+    font-size: 11px; font-weight: 600; color: {COR_TEXTO_SECUNDARIO};
     text-transform: uppercase; letter-spacing: 0.05em;
 }}
 .card-kpi .valor {{
-    font-size: 1.25rem; font-weight: 700; color: #ffffff; margin-top: 0.2rem;
+    font-size: 1.25rem; font-weight: 700; color: {COR_TEXTO_PRIMARIO}; margin-top: 0.2rem;
     font-variant-numeric: tabular-nums;
 }}
 .card-kpi .subvalor {{ font-size: 12px; font-weight: 500; margin-top: 0.1rem; }}
+
+/* Cards "primário" (KPIs essenciais, valor grande) vs "compacto"
+   (secundários — contagens, alertas) — 2026-09-03, pedido do Diego:
+   divulgação progressiva também dentro da própria linha de KPIs da Visão
+   Geral, não só nos expanders. Os 2-3 números que mais importam
+   (Patrimônio, Resultado, Proventos) continuam do tamanho normal; o resto
+   fica visível mas discreto, numa segunda linha menor, sem competir em
+   destaque visual com o que importa mais. */
+.card-kpi.compacto {{ padding: 0.55rem 0.9rem; }}
+.card-kpi.compacto .rotulo {{ font-size: 10px; }}
+.card-kpi.compacto .valor {{ font-size: 1.0rem; margin-top: 0.1rem; }}
+
+/* Aviso de privacidade (LGPD/"ocultar valores") — substitui o gráfico de
+   Evolução Patrimonial quando o modo de ocultar valores está ativo
+   (2026-09-03, pedido do Diego): a série histórica em R$ some da tela por
+   completo (não só mascarada com ••••, que ainda revelaria a FORMA da
+   curva) — fica claro que a informação está intencionalmente escondida,
+   não que faltam dados. O donut de Alocação não precisa desse tratamento:
+   ele já mostra só Ticker + percentual, nunca um valor em R$. */
+.aviso-privacidade {{
+    background: {COR_FUNDO_CARD}; border: 1px dashed #3a3a3c; border-radius: 0.85rem;
+    padding: 1.4rem 1rem; text-align: center; color: {COR_TEXTO_SECUNDARIO};
+    font-size: 13px;
+}}
+.aviso-privacidade .icone {{ font-size: 1.4rem; margin-bottom: 0.3rem; display: block; }}
 
 /* Badges (pílulas coloridas) — mesmas classes/cores do HTML original */
 .badge {{
@@ -110,8 +144,8 @@ table.tabela-carteira th {{
 table.tabela-carteira td {{ padding: 8px; border-bottom: 1px solid #27303f; vertical-align: middle; }}
 table.tabela-carteira tr:hover {{ background: rgba(255,255,255,0.02); }}
 table.tabela-carteira tr.linha-alvo {{ border-left: 3px solid {COR_INFO}; }}
-table.tabela-carteira .ticker {{ font-weight: 700; color: #ffffff; }}
-table.tabela-carteira .setor {{ font-size: 11px; color: #9ca3af; }}
+table.tabela-carteira .ticker {{ font-weight: 700; color: {COR_TEXTO_PRIMARIO}; }}
+table.tabela-carteira .setor {{ font-size: 11px; color: {COR_TEXTO_SECUNDARIO}; }}
 /* Segunda linha, menor, dentro de uma célula que junta duas informações
    relacionadas na mesma coluna (ex: Cotação + Variação do Dia, ou Preço
    Teto + margem de segurança) — 2026-09-02, reduz o nº de colunas da
@@ -138,7 +172,7 @@ table.tabela-carteira .subcelula {{ font-size: 11px; color: #9ca3af; margin-top:
 }}
 .linha-diagnostico:last-child {{ border-bottom: none; }}
 .linha-diagnostico .rotulo-diag {{ color: #c3cad6; }}
-.linha-diagnostico .valor-diag {{ font-weight: 700; color: #ffffff; text-align: right; }}
+.linha-diagnostico .valor-diag {{ font-weight: 700; color: {COR_TEXTO_PRIMARIO}; text-align: right; }}
 .selo-fonte {{
     display: inline-block; font-size: 10px; color: #6b7280; margin-top: 0.5rem;
     letter-spacing: 0.02em;
@@ -329,13 +363,25 @@ def badge_alerta(preco_alvo: float | None, cotacao_atual: float | None, formatar
 
 
 def card_kpi_html(
-    rotulo: str, valor: str, cor_valor: str = "#ffffff", subvalor: str | None = None,
-    cor_sub: str = "#9ca3af", destaque: bool = False,
+    rotulo: str, valor: str, cor_valor: str = COR_TEXTO_PRIMARIO, subvalor: str | None = None,
+    cor_sub: str = COR_TEXTO_SECUNDARIO, destaque: bool = False, compacto: bool = False,
 ) -> str:
+    """
+    `compacto` (2026-09-03, pedido do Diego — divulgação progressiva na
+    própria linha de KPIs): usado nos cards secundários (contagens,
+    alertas), que devem aparecer sempre visíveis mas menores/discretos,
+    sem competir visualmente com os 2-3 números essenciais (Patrimônio,
+    Resultado). `destaque` e `compacto` são independentes — não faz
+    sentido combinar os dois, mas nada impede.
+    """
     sub = f'<div class="subvalor" style="color:{cor_sub}">{subvalor}</div>' if subvalor else ""
-    classe = "card-kpi destaque" if destaque else "card-kpi"
+    classes = "card-kpi"
+    if destaque:
+        classes += " destaque"
+    if compacto:
+        classes += " compacto"
     return (
-        f'<div class="{classe}"><span class="rotulo">{rotulo}</span>'
+        f'<div class="{classes}"><span class="rotulo">{rotulo}</span>'
         f'<div class="valor" style="color:{cor_valor}">{valor}</div>{sub}</div>'
     )
 
@@ -343,6 +389,15 @@ def card_kpi_html(
 def render_cards(cards_html: list[str]) -> None:
     """Renderiza uma linha de cards de resumo lado a lado (grid responsivo)."""
     st.markdown(f'<div class="grid-cards">{"".join(cards_html)}</div>', unsafe_allow_html=True)
+
+
+def aviso_privacidade_html(mensagem: str) -> str:
+    """
+    Bloco de aviso "LGPD" (2026-09-03, pedido do Diego): usado no lugar de
+    um gráfico com valores em R$ quando `ocultar_valores` está ativo — ver
+    `ui/visao_geral.py::_render_graficos_resumo`.
+    """
+    return f'<div class="aviso-privacidade"><span class="icone">🔒</span>{mensagem}</div>'
 
 
 def linha_diagnostico_html(rotulo: str, valor: str, cor_valor: str = "#ffffff") -> str:

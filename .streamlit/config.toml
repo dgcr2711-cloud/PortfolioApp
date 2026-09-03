@@ -1,12 +1,16 @@
-# Tema escuro do app, mesma paleta do dashboard original (Tailwind
-# "gray-900/gray-800" de fundo, destaque "emerald-500"). Mudar as cores do
-# app inteiro é só editar os valores aqui — não precisa mexer no código.
+# Tema escuro do app — paleta "Executivo Black" (2026-09-03, a pedido do
+# Diego: visual mais sóbrio/institucional que o cinza-azulado original).
+# Mudar as cores do app inteiro é só editar os valores aqui — não precisa
+# mexer no código. Os mesmos valores vivem em core/config.py
+# (COR_FUNDO_APP / COR_FUNDO_CARD / COR_TEXTO_PRIMARIO /
+# COR_TEXTO_SECUNDARIO) para os cards/tabelas HTML "manuais" (que o tema
+# do Streamlit não alcança) usarem exatamente as mesmas cores.
 [theme]
 base = "dark"
 primaryColor = "#10b981"
-backgroundColor = "#111827"
-secondaryBackgroundColor = "#1f2937"
-textColor = "#e5e7eb"
+backgroundColor = "#252324"
+secondaryBackgroundColor = "#1E1C1D"
+textColor = "#F4F4F5"
 font = "sans serif"
 
 [server]

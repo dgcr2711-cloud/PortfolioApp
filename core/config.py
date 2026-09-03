@@ -207,15 +207,21 @@ INTERVALO_ATUALIZACAO_PROVENTOS_B3_SEGUNDOS = 24 * 60 * 60
 LIMITE_CONCENTRACAO_ALERTA_PCT = 20.0
 
 # ----------------------------------------------------------------------
-# Cores (mesma paleta do dashboard original — Tailwind "emerald/rose/sky" —
-# mais um tom "dourado" para destacar leituras de qualidade/valuation no
-# painel de diagnóstico, inspirado na estética sóbria de relatórios de
-# investimento institucionais)
+# Cores — paleta "Executivo Black" (2026-09-03, a pedido do Diego: visual
+# mais sóbrio/institucional, no espírito de fintechs como o TradeMap).
+# COR_POSITIVO/COR_NEGATIVO continuam sendo usadas em todo o app para
+# lucro/prejuízo, alta/baixa etc.; COR_FUNDO_APP/COR_FUNDO_CARD e os dois
+# tons de texto abaixo são os únicos que mudaram de valor nesta rodada —
+# ver o mesmo tema espelhado em .streamlit/config.toml (que cobre os
+# componentes NATIVOS do Streamlit; estas constantes cobrem os cards/
+# tabelas "manuais" em HTML, feitos em ui/styles.py).
 # ----------------------------------------------------------------------
 COR_POSITIVO = "#34d399"   # emerald-400
-COR_NEGATIVO = "#fb7185"   # rose-400
+COR_NEGATIVO = "#F87171"   # red-400
 COR_NEUTRO = "#9ca3af"     # gray-400
 COR_INFO = "#38bdf8"       # sky-400
 COR_DESTAQUE = "#d4af37"   # dourado — usado com moderação, só em leituras-chave
-COR_FUNDO_CARD = "#1f2937"  # gray-800
-COR_FUNDO_APP = "#111827"   # gray-900
+COR_FUNDO_CARD = "#1E1C1D"  # "Executivo Black" — fundo dos cards/containers
+COR_FUNDO_APP = "#252324"   # "Executivo Black" — fundo da página
+COR_TEXTO_PRIMARIO = "#F4F4F5"    # zinc-100 — valores, títulos, texto de destaque
+COR_TEXTO_SECUNDARIO = "#A1A1AA"  # zinc-400 — rótulos, legendas, texto de apoio
