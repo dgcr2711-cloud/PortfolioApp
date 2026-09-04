@@ -182,10 +182,14 @@ def _secao_grafico_individual(lista_ativos: list[dict]) -> None:
             return
 
         ativo = next(a for a in lista_ativos if a["ticker"] == ticker_escolhido)
-        # Altura maior que o padrão (2026-09-03): o gráfico agora ocupa a
-        # largura inteira da tela em vez de 1/3, então fica mais elegante
-        # com mais altura também — evita um gráfico "achatado".
-        fig = grafico_preco_individual(pontos, preco_teto_com_margem=ativo.get("preco_teto_com_margem"), altura=420)
+        # Altura maior que o padrão (2026-09-03): o gráfico ocupa a largura
+        # inteira da tela em vez de 1/3, então fica mais elegante com mais
+        # altura também — evita um gráfico "achatado". Reduzida de 420 pra
+        # 360 (2026-09-04, pedido do Diego pra diminuir um pouco) — agora
+        # que os rótulos do eixo X ficaram compactos (ver
+        # `ui/graficos.py::_eixos_com_crosshair`), o gráfico não precisa
+        # mais de tanta altura pra "respirar" das datas na parte de baixo.
+        fig = grafico_preco_individual(pontos, preco_teto_com_margem=ativo.get("preco_teto_com_margem"), altura=360)
         st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
         st.caption("Fonte: Yahoo Finance — fechamento diário.")
 

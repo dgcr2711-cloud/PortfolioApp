@@ -113,11 +113,25 @@ preenchimento, pra não sobrepor duas áreas coloridas e poluir a leitura.
 com um gráfico pequeno pra cada ação lado a lado"): `grafico_sparkline`,
 uma versão minúscula dos gráficos de linha acima — sem eixo, sem legenda,
 sem hover, só a forma da curva — pra caber várias lado a lado num card
-compacto por ativo (ver `ui/visao_geral.py::_render_por_setor`). Reaproveita
-a mesma técnica de trace-piso + `fill="tonexty"` de cima, mas a cor é
-dinâmica por ativo (verde se subiu no período, vermelho se caiu — decidido
-por quem chama), daí o helper `_hex_para_rgba` pra gerar o `fillcolor` a
-partir da cor da linha em vez de uma cor fixa.
+compacto por ativo (testado agrupado por setor na Visão Geral, depois
+movido pro `ui/carteira.py::_secao_sparklines_ativos`, ver changelog de lá).
+Reaproveita a mesma técnica de trace-piso + `fill="tonexty"` de cima, mas a
+cor é dinâmica por ativo (verde se subiu no período, vermelho se caiu —
+decidido por quem chama), daí o helper `_hex_para_rgba` pra gerar o
+`fillcolor` a partir da cor da linha em vez de uma cor fixa.
+
+2026-09-04 (datas do eixo X ilegíveis, print do Diego — "Gráfico do Ativo"
+com uma "DD/MM/AAAA" por dia, na vertical, uma colada na outra): causa era
+`grafico_evolucao_patrimonial`/`grafico_preco_individual` passarem pro
+Plotly a data já formatada em texto (`formatar_data_br`) em vez da data
+ISO original — uma lista de strings vira eixo de "categoria" (Plotly é
+obrigado a desenhar um rótulo por ponto, sem poder espaçar/omitir nada).
+Corrigido: as duas passaram a usar a data ISO (`"AAAA-MM-DD"`) direto no
+eixo X, que o Plotly reconhece como eixo de DATA de verdade — daí ele
+mesmo escolhe quantos rótulos cabem sem sobrepor. `_eixos_com_crosshair`
+ganhou `tickformat="%m/%y"` (rótulo compacto, ex.: "06/26", só mês/ano,
+como o Diego pediu) e `hoverformat="%d/%m/%Y"` (a data completa continua
+aparecendo no hover, só o rótulo do eixo que ficou compacto).
 """
 
 from __future__ import annotations
@@ -125,7 +139,7 @@ from __future__ import annotations
 import plotly.graph_objects as go
 
 from core.config import COR_FUNDO_APP, COR_TEXTO_PRIMARIO, COR_TEXTO_SECUNDARIO
-from core.formatting import formatar_data_br, formatar_moeda
+from core.formatting import formatar_moeda
 
 # Paleta "Executivo Black" (2026-09-03) — 7 cores, na ordem validada pelo
 # script `validate_palette.js` do skill interno de dataviz (banda de
@@ -193,11 +207,26 @@ def _eixos_com_crosshair() -> tuple[dict, dict]:
     junto com `hovermode="x unified"`, mostra o valor exato de cada série
     naquele ponto sem o usuário precisar estimar visualmente na régua do
     gráfico. Reaproveitado pelos 2 gráficos de linha deste módulo.
+
+    2026-09-04 (pedido do Diego, print mostrando as datas do eixo X
+    ilegíveis — uma "DD/MM/AAAA" por dia, na vertical, uma colada na
+    outra): `tickformat="%m/%y"` deixa o rótulo compacto (ex.: "06/26",
+    só mês/ano). Isso só funciona junto com uma mudança nas duas funções
+    que chamam este helper: o eixo X passou a receber a data ISO original
+    (`p["data"]`/`h["data"]`, "AAAA-MM-DD") em vez da versão já formatada
+    em "DD/MM/AAAA" — o Plotly só trata o eixo como eixo de DATA de
+    verdade (espaçamento contínuo, ele mesmo escolhendo quantos rótulos
+    cabem sem sobrepor) quando os valores são datas reais; uma lista de
+    strings já formatadas vira eixo de "categoria", que é obrigado a
+    desenhar um rótulo por ponto — era isso que lotava o eixo. `hoverformat`
+    mantém a data completa (DD/MM/AAAA) no hover unificado, mesmo com o
+    rótulo do eixo compacto.
     """
     eixo_x = dict(
         color=_COR_EIXO, gridcolor=_COR_GRADE,
         showspikes=True, spikemode="across", spikesnap="cursor",
         spikecolor="rgba(255,255,255,0.25)", spikethickness=1, spikedash="solid",
+        tickformat="%m/%y", hoverformat="%d/%m/%Y",
     )
     eixo_y = dict(color=_COR_EIXO, gridcolor=_COR_GRADE)
     return eixo_x, eixo_y
@@ -282,7 +311,11 @@ def grafico_evolucao_patrimonial(historico: list[dict], *, altura: int = 320, le
     a pouca altura disponível ali; os dados e cores continuam os mesmos.
     """
     fig = go.Figure()
-    datas = [formatar_data_br(h["data"]) for h in historico]
+    # Data ISO original ("AAAA-MM-DD"), não mais formatada em "DD/MM/AAAA"
+    # (2026-09-04, ver docstring de `_eixos_com_crosshair`) — é o que faz o
+    # Plotly tratar isto como eixo de data de verdade, em vez de categoria
+    # com um rótulo por ponto.
+    datas = [h["data"] for h in historico]
     valores_atual = [h["totalAtual"] for h in historico]
     valores_investido = [h["totalInvestido"] for h in historico]
     eixo_x, eixo_y = _eixos_com_crosshair()
@@ -346,7 +379,10 @@ def grafico_preco_individual(
     abaixo dele, sem precisar abrir outra aba.
     """
     fig = go.Figure()
-    datas = [formatar_data_br(p["data"]) for p in pontos]
+    # Data ISO original, não formatada (ver comentário em
+    # grafico_evolucao_patrimonial acima e docstring de
+    # `_eixos_com_crosshair`, 2026-09-04).
+    datas = [p["data"] for p in pontos]
     fechamentos = [p["fechamento"] for p in pontos]
     eixo_x, eixo_y = _eixos_com_crosshair()
     series_range = [fechamentos]
