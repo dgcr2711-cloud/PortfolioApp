@@ -89,6 +89,40 @@ div[data-testid="stCaptionContainer"] {{ margin-bottom: 0.1rem !important; }}
 .card-kpi.compacto .rotulo {{ font-size: 10px; }}
 .card-kpi.compacto .valor {{ font-size: 1.0rem; margin-top: 0.1rem; }}
 
+/* Realce interativo em TODOS os cards (2026-09-04, pedido do Diego —
+   "criar alguma borda interativa ou com cores realçadas em todos os
+   cards, fica legal a visualização e valoriza o projeto"): ao passar o
+   mouse, a borda do card assume a cor de destaque dourada (mesma
+   COR_DESTAQUE usada no resto do app — nenhuma cor nova entra no tema) e
+   ganha um leve brilho + "levantada" de 1px, com transição suave. Cobre
+   tanto os cards HTML manuais (.card-kpi e os outros cards deste arquivo)
+   quanto os containers nativos do Streamlit com borda
+   (`st.container(border=True)` — usados nos cards de gráfico da Visão
+   Geral/Carteira), pra ficar consistente em toda a tela, não só nos
+   cards "manuais". `transform: translateY(-1px)` é sutil de propósito —
+   o objetivo é indicar "isto é interativo", não distrair. */
+.card-kpi,
+.card-tabela,
+.painel-diagnostico,
+.card-proximos-proventos,
+.cal-dia,
+div[data-testid="stVerticalBlockBorderWrapper"] {{
+    transition: border-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
+}}
+.card-kpi:hover,
+.card-tabela:hover,
+.painel-diagnostico:hover,
+.card-proximos-proventos:hover,
+.cal-dia:hover,
+div[data-testid="stVerticalBlockBorderWrapper"]:hover {{
+    border-color: rgba(212,175,55,0.55) !important;
+    box-shadow: 0 0 0 1px rgba(212,175,55,0.18), 0 6px 16px rgba(0,0,0,0.35);
+    transform: translateY(-1px);
+}}
+/* Card já em destaque (borda dourada permanente) fica só um pouco mais
+   forte no hover, pra não parecer que "perdeu" o destaque que já tinha. */
+.card-kpi.destaque:hover {{ border-color: rgba(212,175,55,0.85) !important; }}
+
 /* Aviso de privacidade (LGPD/"ocultar valores") — substitui o gráfico de
    Evolução Patrimonial quando o modo de ocultar valores está ativo
    (2026-09-03, pedido do Diego): a série histórica em R$ some da tela por

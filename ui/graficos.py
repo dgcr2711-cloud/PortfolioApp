@@ -89,12 +89,25 @@ precisa ser recortado (clipped) contra essa borda inferior do eixo, e esse
 recorte estava saindo ondulado/mal-desenhado na renderização — em vez de
 uma borda reta. Correção: **removido o preenchimento (`fill`/`fillcolor`)
 dos dois gráficos de linha por completo** — voltam a ser só a linha, sem
-área sombreada embaixo. Além de eliminar o artefato, é a abordagem mais
-robusta (nenhuma combinação de range de eixo Y pode voltar a quebrar o
-preenchimento, porque não existe mais preenchimento) e é o padrão visual
-mais comum em apps de investimento de verdade (StatusInvest, TradingView
-no modo "linha") quando o gráfico já está bem ajustado (zoom) na faixa de
-valores reais.
+área sombreada embaixo.
+
+2026-09-04 (preenchimento sob a linha, de volta — pedido do Diego, "este
+gráfico a dois dias tb tinha coloração abaixo da linha, o que deixa mais
+interativo"): a remoção acima resolveu o bug, mas o motivo raiz nunca foi
+"ter preenchimento", foi usar `fill="tozeroy"` (que aponta pro y=0
+matemático, longe da faixa visível) e depender do Plotly recortar isso
+contra o range do eixo — esse recorte é que saía ondulado. A técnica nova
+evita o recorte por completo: cada gráfico de linha ganha uma trace
+"piso" invisível (`line=dict(width=0)`, sem hover, sem legenda) com y
+constante igual ao MÍNIMO do range do eixo Y (o mesmo valor de
+`_intervalo_eixo_y`) — e a trace principal usa `fill="tonexty"` contra
+essa trace-piso, em vez de `"tozeroy"`. Como a trace-piso já está
+exatamente na borda inferior visível do gráfico, o preenchimento nunca
+precisa ser recortado (não existe área "fora" pra cortar) — sai sempre
+com uma borda reta, não importa a combinação de dados/range. Aplicado só
+na linha principal de cada gráfico (Patrimônio Atual / Fechamento) — a
+linha de referência (Total Investido, tracejada) continua sem
+preenchimento, pra não sobrepor duas áreas coloridas e poluir a leitura.
 """
 
 from __future__ import annotations
@@ -132,17 +145,19 @@ def _intervalo_eixo_y(*series: list[float], margem_pct: float = 0.08) -> list[fl
     mínimo/máximo real dos dados (2026-09-03, correção do bug do "gráfico
     verde sólido" reportado pelo Diego).
 
-    Por quê: as linhas de `grafico_evolucao_patrimonial` e
-    `grafico_preco_individual` usam `fill="tozeroy"` (preenchimento sutil
-    "até o zero" sob a linha, pra dar profundidade). Sem um range de eixo Y
-    explícito, o Plotly autoajusta o eixo também partindo de perto do zero
-    — mas como os valores reais (ex.: patrimônio ~R$ 700 mil) estão muito
-    longe de zero, o preenchimento "até o zero" acaba cobrindo quase o
-    gráfico inteiro, virando um bloco de cor sólida em vez de um degradê
-    fino. Dando ao eixo um range próximo do mínimo/máximo real, o
-    preenchimento continua matematicamente indo até zero mas fica
-    visualmente cortado fora da área visível — só sobra a faixa fina de
-    degradê pretendida.
+    Por quê: sem um range de eixo Y explícito, o Plotly autoajusta o eixo
+    partindo de perto do zero — mas como os valores reais (ex.: patrimônio
+    ~R$ 700 mil) estão muito longe de zero, o gráfico fica "espremido" lá
+    em cima, sem aproveitar a altura disponível pra mostrar a variação de
+    verdade. Dando ao eixo um range próximo do mínimo/máximo real (com uma
+    margem de respiro), o gráfico usa a altura toda pra mostrar a variação.
+
+    Desde 2026-09-04, o MÍNIMO deste range também vira o "piso" onde o
+    preenchimento sob a linha principal é ancorado (`fill="tonexty"` contra
+    uma trace invisível nesse valor — ver docstring do módulo) em vez do
+    antigo `fill="tozeroy"`, que ia até o zero matemático e dependia do
+    Plotly recortar isso contra o range visível (o recorte é que saía
+    ondulado no bug reportado pelo Diego).
 
     Aceita várias séries de uma vez (ex.: "Patrimônio Atual" + "Total
     Investido", ou "Fechamento" + a linha de preço-teto) pra que o range
@@ -260,6 +275,17 @@ def grafico_evolucao_patrimonial(historico: list[dict], *, altura: int = 320, le
     datas = [formatar_data_br(h["data"]) for h in historico]
     valores_atual = [h["totalAtual"] for h in historico]
     valores_investido = [h["totalInvestido"] for h in historico]
+    eixo_x, eixo_y = _eixos_com_crosshair()
+    eixo_y["range"] = _intervalo_eixo_y(valores_atual, valores_investido)
+
+    # Trace "piso" invisível, só para ancorar o preenchimento sob a linha
+    # de Patrimônio Atual sem recorte (ver docstring do módulo, 2026-09-04)
+    # — precisa vir ANTES da trace que usa fill="tonexty", que preenche
+    # contra a trace imediatamente anterior.
+    fig.add_trace(go.Scatter(
+        x=datas, y=[eixo_y["range"][0]] * len(datas), mode="lines",
+        line=dict(width=0), hoverinfo="skip", showlegend=False,
+    ))
     # customdata leva o valor já formatado em R$ no padrão brasileiro
     # (vírgula decimal) pro hover — o formato nativo do Plotly (%{y:,.2f})
     # sairia em padrão americano (ponto decimal), inconsistente com o
@@ -267,6 +293,7 @@ def grafico_evolucao_patrimonial(historico: list[dict], *, altura: int = 320, le
     fig.add_trace(go.Scatter(
         x=datas, y=valores_atual, name="Patrimônio Atual",
         line=dict(color="#34d399", width=2),
+        fill="tonexty", fillcolor="rgba(52,211,153,0.14)",
         customdata=[formatar_moeda(v) for v in valores_atual],
         hovertemplate="<b>%{customdata}</b><extra>Patrimônio Atual</extra>",
     ))
@@ -276,8 +303,6 @@ def grafico_evolucao_patrimonial(historico: list[dict], *, altura: int = 320, le
         customdata=[formatar_moeda(v) for v in valores_investido],
         hovertemplate="<b>%{customdata}</b><extra>Total Investido</extra>",
     ))
-    eixo_x, eixo_y = _eixos_com_crosshair()
-    eixo_y["range"] = _intervalo_eixo_y(valores_atual, valores_investido)
     fig.update_layout(
         height=altura, margin=dict(t=10, b=10, l=10, r=10),
         paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
@@ -313,9 +338,23 @@ def grafico_preco_individual(
     fig = go.Figure()
     datas = [formatar_data_br(p["data"]) for p in pontos]
     fechamentos = [p["fechamento"] for p in pontos]
+    eixo_x, eixo_y = _eixos_com_crosshair()
+    series_range = [fechamentos]
+    if preco_teto_com_margem is not None:
+        series_range.append([preco_teto_com_margem])
+    eixo_y["range"] = _intervalo_eixo_y(*series_range)
+
+    # Trace "piso" invisível — mesma técnica de grafico_evolucao_patrimonial
+    # acima (ver docstring do módulo, 2026-09-04), pra ancorar o
+    # preenchimento sob a linha de Fechamento sem recorte/artefato.
+    fig.add_trace(go.Scatter(
+        x=datas, y=[eixo_y["range"][0]] * len(datas), mode="lines",
+        line=dict(width=0), hoverinfo="skip", showlegend=False,
+    ))
     fig.add_trace(go.Scatter(
         x=datas, y=fechamentos, name="Fechamento",
         line=dict(color=COR_LINHA_ATIVO, width=2),
+        fill="tonexty", fillcolor="rgba(56,189,248,0.14)",
         customdata=[formatar_moeda(v) for v in fechamentos],
         hovertemplate="<b>%{customdata}</b><extra>Fechamento</extra>",
     ))
@@ -327,11 +366,6 @@ def grafico_preco_individual(
             annotation_position="top left",
             annotation_font=dict(color=COR_PRECO_TETO, size=11),
         )
-    eixo_x, eixo_y = _eixos_com_crosshair()
-    series_range = [fechamentos]
-    if preco_teto_com_margem is not None:
-        series_range.append([preco_teto_com_margem])
-    eixo_y["range"] = _intervalo_eixo_y(*series_range)
     fig.update_layout(
         height=altura, margin=dict(t=30, b=10, l=10, r=10),
         paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",

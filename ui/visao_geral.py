@@ -238,7 +238,14 @@ def _render_graficos_resumo(dados: dict, posicoes: list[dict], ocultar_valores: 
             elif not historico:
                 st.caption("Ainda não há snapshots suficientes — atualize as cotações em dias diferentes para ver a evolução aqui.")
             else:
-                fig = grafico_evolucao_patrimonial(historico, altura=260, legenda=False)
+                # altura igual à do donut de Alocação (2026-09-04, Diego
+                # reportou por print que a caixa externa deste card ficava
+                # mais baixa que a de Alocação, "não alinhada") — a borda de
+                # cada card é só o tamanho do st.container(border=True) ao
+                # redor do gráfico, então alturas de figura diferentes (era
+                # 260 aqui vs. 300 no donut) resultavam em caixas de altura
+                # diferente lado a lado, mesmo com o mesmo layout de colunas.
+                fig = grafico_evolucao_patrimonial(historico, altura=300, legenda=False)
                 st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
 
 
