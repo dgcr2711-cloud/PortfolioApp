@@ -12,6 +12,12 @@ função antiga, core/calculations.py::resumo_ir_mensal, já dizia na
 docstring que foi substituída por essa versão mais completa). Mostrar as
 duas ao mesmo tempo, em abas diferentes, arriscava confundir qual número é
 o "de verdade" — a aba de Imposto de Renda é o lugar certo pra isso.
+
+2026-09-04: Histórico de Transações (_tabela_transacoes) ganhou um filtro
+por ticker (Diego pediu "filtro pro histórico de compras, ação por ação").
+O mesmo filtro foi replicado no app mobile
+(mobile-app/src/screens/HistoricoScreen.tsx), como chips horizontais em
+vez de selectbox — mais adequado pro toque em tela pequena.
 """
 
 from __future__ import annotations
@@ -207,17 +213,32 @@ def _tabela_transacoes(dados: dict, salvar) -> None:
             "Ticker": c["ticker"], "Qtd": c["qtd"], "Preço Unit.": formatar_moeda(c["preco"]),
             "Taxas": formatar_moeda(c.get("taxas") or 0), "Total": formatar_moeda(total), "id": c["id"],
         })
-    df = pd.DataFrame(linhas)
-    st.dataframe(df.drop(columns=["id"]), use_container_width=True, hide_index=True)
+
+    # 2026-09-04 (Diego pediu "filtro pro histórico de compras, ação por
+    # ação"): filtro simples por ticker acima da tabela — afeta tanto a
+    # tabela exibida quanto as opções do "Remover uma transação" abaixo,
+    # pra ficar consistente (não faria sentido remover algo que não está
+    # nem aparecendo na tela filtrada).
+    tickers_disponiveis = sorted({l["Ticker"] for l in linhas})
+    filtro = st.selectbox("Filtrar por ativo", ["Todos"] + tickers_disponiveis, key="sel_filtro_historico_ticker")
+    linhas_filtradas = linhas if filtro == "Todos" else [l for l in linhas if l["Ticker"] == filtro]
+
+    df = pd.DataFrame(linhas_filtradas)
+    st.dataframe(df.drop(columns=["id"]) if not df.empty else df, use_container_width=True, hide_index=True)
+    if not linhas_filtradas:
+        st.caption(f"Nenhuma transação de {filtro} encontrada.")
 
     with st.expander("🗑️ Remover uma transação"):
-        opcoes = {f'{l["Data"]} · {l["Tipo"]} · {l["Ticker"]} · {l["Qtd"]}x': l["id"] for l in linhas}
-        escolhida = st.selectbox("Transação", list(opcoes.keys()), key="sel_remover_transacao")
-        if st.button("Remover transação selecionada"):
-            id_remover = opcoes[escolhida]
-            dados["compras"] = [c for c in dados["compras"] if c["id"] != id_remover]
-            salvar(dados)
-            st.rerun()
+        opcoes = {f'{l["Data"]} · {l["Tipo"]} · {l["Ticker"]} · {l["Qtd"]}x': l["id"] for l in linhas_filtradas}
+        if not opcoes:
+            st.caption("Nenhuma transação pra remover com esse filtro.")
+        else:
+            escolhida = st.selectbox("Transação", list(opcoes.keys()), key="sel_remover_transacao")
+            if st.button("Remover transação selecionada"):
+                id_remover = opcoes[escolhida]
+                dados["compras"] = [c for c in dados["compras"] if c["id"] != id_remover]
+                salvar(dados)
+                st.rerun()
 
 
 def _tabela_consolidado(dados: dict) -> None:

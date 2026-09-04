@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ActivityIndicator, Alert, FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, FlatList, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { addDoc, collection, doc, onSnapshot, serverTimestamp } from 'firebase/firestore';
 import { db } from '../firebase';
 import { usePortfolioSnapshot } from '../hooks/usePortfolioSnapshot';
@@ -14,6 +14,13 @@ import type { Transacao } from '../types';
  * documento em pendencias_remocoes, e só quando o app do PC estiver aberto
  * e você clicar em "🔄 Atualizar Dados" a transação é removida de verdade
  * (igual clicar em "🗑️ Remover uma transação" lá).
+ *
+ * 2026-09-04 (Diego pediu "filtro pro histórico de compras, ação por
+ * ação" — mesmo pedido aplicado no PC, `ui/compras.py::_tabela_transacoes`):
+ * chips horizontais roláveis (um por ticker + "Todos") em vez de um
+ * `SegmentedControl` — o mesmo motivo da correção da aba "Mais": um
+ * controle de abas numa linha só quebra com muitos ativos, um carrossel
+ * horizontal escala bem com qualquer quantidade de tickers.
  */
 const COLECAO_PENDENCIAS_REMOCOES = 'pendencias_remocoes';
 
@@ -23,6 +30,7 @@ export function HistoricoScreen() {
   const { snapshot, carregando, erro } = usePortfolioSnapshot();
   const [statusPorId, setStatusPorId] = useState<Record<string, StatusRemocao>>({});
   const [mensagemErroPorId, setMensagemErroPorId] = useState<Record<string, string>>({});
+  const [tickerFiltro, setTickerFiltro] = useState<string | null>(null);
 
   async function pedirRemocao(transacao: Transacao) {
     setStatusPorId((anterior) => ({ ...anterior, [transacao.id]: 'enviando' }));
@@ -79,19 +87,40 @@ export function HistoricoScreen() {
     );
   }
 
+  const todasTransacoes = snapshot.compras ?? [];
+  const tickers = Array.from(new Set(todasTransacoes.map((t: Transacao) => t.ticker))).sort();
+  const transacoesFiltradas = tickerFiltro ? todasTransacoes.filter((t: Transacao) => t.ticker === tickerFiltro) : todasTransacoes;
+
   return (
     <FlatList
       style={estilos.container}
       contentContainerStyle={estilos.lista}
-      data={snapshot.compras ?? []}
+      data={transacoesFiltradas}
       keyExtractor={(item: Transacao) => item.id}
       ListHeaderComponent={
         <>
           <Text style={estilos.titulo}>Histórico</Text>
           <Text style={estilos.legenda}>Todas as compras e vendas registradas — a remoção só é aplicada quando o PC sincronizar.</Text>
+          {tickers.length > 0 && (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={estilos.filtroContainer}
+              style={estilos.filtroScroll}
+            >
+              <ChipFiltro rotulo="Todos" ativo={tickerFiltro === null} onPress={() => setTickerFiltro(null)} />
+              {tickers.map((ticker: string) => (
+                <ChipFiltro key={ticker} rotulo={ticker} ativo={tickerFiltro === ticker} onPress={() => setTickerFiltro(ticker)} />
+              ))}
+            </ScrollView>
+          )}
         </>
       }
-      ListEmptyComponent={<Text style={estilos.aviso}>Nenhuma transação registrada ainda.</Text>}
+      ListEmptyComponent={
+        <Text style={estilos.aviso}>
+          {tickerFiltro ? `Nenhuma transação de ${tickerFiltro} encontrada.` : 'Nenhuma transação registrada ainda.'}
+        </Text>
+      }
       renderItem={({ item }: { item: Transacao }) => (
         <LinhaTransacao
           transacao={item}
@@ -101,6 +130,18 @@ export function HistoricoScreen() {
         />
       )}
     />
+  );
+}
+
+function ChipFiltro({ rotulo, ativo, onPress }: { rotulo: string; ativo: boolean; onPress: () => void }) {
+  return (
+    <TouchableOpacity
+      style={[estilos.chip, ativo && estilos.chipAtivo]}
+      onPress={onPress}
+      activeOpacity={0.7}
+    >
+      <Text style={[estilos.textoChip, ativo && estilos.textoChipAtivo]}>{rotulo}</Text>
+    </TouchableOpacity>
   );
 }
 
@@ -153,6 +194,19 @@ const estilos = StyleSheet.create({
   titulo: { color: cores.texto, fontSize: 26, fontWeight: '700' },
   legenda: { color: cores.textoApagado, fontSize: 12, marginTop: 2, marginBottom: espacamento.lg, lineHeight: 17 },
   aviso: { color: cores.neutro, fontSize: 13, lineHeight: 19 },
+  filtroScroll: { marginBottom: espacamento.md },
+  filtroContainer: { gap: espacamento.sm, paddingRight: espacamento.lg },
+  chip: {
+    paddingVertical: 6,
+    paddingHorizontal: espacamento.md,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: cores.borda,
+    backgroundColor: cores.fundoCard,
+  },
+  chipAtivo: { backgroundColor: 'rgba(212,175,55,0.16)', borderColor: cores.destaque },
+  textoChip: { color: cores.textoSecundario, fontSize: 13, fontWeight: '600' },
+  textoChipAtivo: { color: cores.destaque },
   cartao: {
     backgroundColor: cores.fundoCard,
     borderRadius: 14,

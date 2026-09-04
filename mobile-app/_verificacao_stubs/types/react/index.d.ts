@@ -8,6 +8,22 @@
 // JSX aninhado (em vez de via prop explícita). Isso é um falso-positivo do
 // harness — não do código — reconhecível porque aparece igual em arquivos
 // já revisados e inalterados (ex: NovaCompraScreen.tsx).
+//
+// 2026-09-04: segunda classe do MESMO problema, agora com "key" — "Property
+// 'key' does not exist" em componentes próprios usados dentro de `.map()`
+// com `key={...}` (React sempre aceita `key` em qualquer componente, sem
+// precisar declarar no tipo de props — via `React.Attributes`/
+// `JSX.IntrinsicAttributes` na tipagem real). Tentei corrigir via
+// `declare global { namespace JSX { interface IntrinsicAttributes {
+// key?: ... } } }` (abaixo) — funciona num arquivo isolado, mas não some
+// aqui porque o `React` usado como fábrica do JSX vem de um `import ...
+// from 'react'` apontando pra este stub (não pro pacote @types/react de
+// verdade), e o tsc resolve o namespace `JSX` a partir do módulo da
+// fábrica antes de cair pro global nesse cenário. Resultado: "key" segue
+// como falso-positivo conhecido do harness, IGUAL ao de "children" acima
+// — confirmado seguro por revisão manual (é o padrão padrão do React,
+// funciona normal com @types/react de verdade, que é o que o app real
+// usa via npm).
 declare namespace React {
   type ReactNode = any;
   type FC<P = any> = (props: P) => any;
@@ -36,4 +52,16 @@ declare module 'react' {
     createElement: (...args: any[]) => any;
   };
   export default ReactDefault;
+}
+
+// Faz o `key={...}` ser aceito em qualquer elemento JSX (componente próprio
+// incluso), igual ao comportamento real do React/@types/react — sem isso,
+// o tsc acusa falsamente "Property 'key' does not exist" em componentes
+// próprios usados dentro de `.map()`.
+declare global {
+  namespace JSX {
+    interface IntrinsicAttributes {
+      key?: string | number | null;
+    }
+  }
 }
