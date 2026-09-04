@@ -55,14 +55,6 @@ from pathlib import Path
 # sem precisar instalar o projeto como pacote — mesmo truque usado em app.py.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-# 2026-09-05 — silencia só este aviso específico do Streamlit ("No runtime
-# found, using MemoryCacheStorageManager"), que aparece em TODO log do
-# GitHub Actions só porque as funções core usam @st.cache_data e aqui não
-# existe uma tela do Streamlit de verdade rodando — comportamento normal e
-# esperado neste script, não um problema. Não mexe em nenhum outro aviso
-# real (erro de cotação, de Firestore etc.), só neste logger específico.
-logging.getLogger("streamlit.runtime.caching.cache_data_api").setLevel(logging.ERROR)
-
 from core import b3_publico, calculations as calc, cloud_sync, market_data  # noqa: E402
 from core.config import INTERVALO_ATUALIZACAO_PROVENTOS_B3_SEGUNDOS  # noqa: E402
 from core.data_store import carregar_dados, salvar_dados  # noqa: E402
@@ -78,6 +70,18 @@ from core.pendencias_celular import (  # noqa: E402
     aplicar_teses_do_celular,
 )
 from ui.acoes_comuns import _registrar_snapshot  # noqa: E402
+
+# 2026-09-05 — silencia só este aviso específico do Streamlit ("No runtime
+# found, using MemoryCacheStorageManager"), que aparece em TODO log do
+# GitHub Actions só porque as funções core usam @st.cache_data e aqui não
+# existe uma tela do Streamlit de verdade rodando — comportamento normal e
+# esperado neste script, não um problema. Não mexe em nenhum outro aviso
+# real (erro de cotação, de Firestore etc.), só neste logger específico.
+# PRECISA vir DEPOIS dos imports acima (não antes): é a própria importação
+# do streamlit (puxada por esses módulos core/ui) que configura o nível
+# desse logger — tentar silenciar antes de importar era sobrescrito
+# silenciosamente por essa configuração interna do streamlit.
+logging.getLogger("streamlit.runtime.caching.cache_data_api").setLevel(logging.ERROR)
 
 
 def _atualizar_proventos_b3_sem_tela(dados: dict, forcar: bool = False) -> None:
