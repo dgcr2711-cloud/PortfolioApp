@@ -103,6 +103,34 @@ except (AttributeError, ValueError, OSError):
 #    é carregado (por isso aqui em cima, antes de qualquer outro import).
 os.environ.setdefault("GRPC_DNS_RESOLVER", "native")
 
+# 3) O FILTRO do aviso do Streamlit ("No runtime found, using
+#    MemoryCacheStorageManager") precisa ficar AQUI EM CIMA também — não
+#    logo abaixo dos imports de "core"/"ui" como estava antes. Motivo,
+#    descoberto só agora lendo o log real com timestamp por linha
+#    (2026-09-05, depois do ajuste (1) acima): o aviso aparece ANTES até do
+#    diagnóstico da credencial do Firebase, que é a primeira linha de
+#    main() — ou seja, ele dispara durante a IMPORTAÇÃO dos módulos
+#    (core/market_data.py e core/fundamentals.py têm funções decoradas com
+#    @st.cache_data, e o Streamlit já verifica "existe uma tela rodando?"
+#    no momento em que decora a função, não só quando ela é chamada). Como
+#    o filtro só era anexado DEPOIS de "from core import ...", ele sempre
+#    chegava tarde demais — o aviso já tinha sido logado. Continuava
+#    aparecendo em todo log mesmo com o filtro presente no arquivo. Um
+#    teste automatizado anterior (com um Streamlit falso/stub) não pegou
+#    esse problema porque o stub não reproduzia esse detalhe exato do
+#    Streamlit de verdade — reforça por que testar com o log real, não só
+#    com stub, importa.
+#
+# Por que um Filter, e não logger.setLevel(): já tentei setLevel (antes E
+# depois dos imports) e o aviso continuou aparecendo — o Streamlit
+# reconfigura o nível desse logger por conta própria toda vez que emite o
+# aviso (não só uma vez, na importação), então qualquer setLevel externo é
+# sobrescrito de novo na próxima chamada. Testei isso isoladamente (mesmo
+# simulando esse comportamento "teimoso") e confirmei: um logging.Filter
+# anexado direto no logger sobrevive a isso, porque é checado depois que a
+# lib decide logar, não depende do nível dela ficar como eu quero.
+logging.getLogger("streamlit.runtime.caching.cache_data_api").addFilter(lambda registro: False)
+
 # Permite rodar este script diretamente (python scripts/verificar_alertas_segundo_plano.py)
 # sem precisar instalar o projeto como pacote — mesmo truque usado em app.py.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -122,23 +150,6 @@ from core.pendencias_celular import (  # noqa: E402
     aplicar_teses_do_celular,
 )
 from ui.acoes_comuns import _registrar_snapshot  # noqa: E402
-
-# 2026-09-05 — silencia só este aviso específico do Streamlit ("No runtime
-# found, using MemoryCacheStorageManager"), que aparece em TODO log do
-# GitHub Actions só porque as funções core usam @st.cache_data e aqui não
-# existe uma tela do Streamlit de verdade rodando — comportamento normal e
-# esperado neste script, não um problema. Não mexe em nenhum outro aviso
-# real (erro de cotação, de Firestore etc.), só neste logger específico.
-#
-# Por que um Filter, e não logger.setLevel(): já tentei setLevel (antes E
-# depois dos imports) e o aviso continuou aparecendo — o Streamlit
-# reconfigura o nível desse logger por conta própria toda vez que emite o
-# aviso (não só uma vez, na importação), então qualquer setLevel externo é
-# sobrescrito de novo na próxima chamada. Testei isso isoladamente (mesmo
-# simulando esse comportamento "teimoso") e confirmei: um logging.Filter
-# anexado direto no logger sobrevive a isso, porque é checado depois que a
-# lib decide logar, não depende do nível dela ficar como eu quero.
-logging.getLogger("streamlit.runtime.caching.cache_data_api").addFilter(lambda registro: False)
 
 # 2026-09-05 — aumenta SÓ NESTE SCRIPT (nunca no app do PC, onde alguém
 # está esperando na tela — por isso 12s ali, de propósito, ver comentário
