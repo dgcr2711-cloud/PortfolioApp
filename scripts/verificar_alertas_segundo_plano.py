@@ -184,10 +184,19 @@ def main() -> int:
     salvar_dados(dados)
 
     # 7. Snapshot resumido pro celular ler em tempo real.
-    if cloud_sync.sincronizacao_configurada():
-        sincronizado = cloud_sync.sincronizar_snapshot(montar_snapshot_para_celular(dados))
-        status = "ok" if sincronizado else "falhou (sem internet ou chave inválida)"
-        print(f"[atualizar] Sincronização com o celular: {status}.")
+    #
+    # IMPORTANTE (2026-09-04): NÃO usa cloud_sync.sincronizacao_configurada()
+    # como guarda aqui — essa função só olha se existe um ARQUIVO de chave
+    # local (~/.portfolio_b3_secrets), o que nunca é verdade rodando no
+    # GitHub Actions (aqui a chave vem da variável de ambiente
+    # FIREBASE_SERVICE_ACCOUNT_JSON). Usá-la como guarda fazia este bloco
+    # inteiro ser pulado em silêncio nesse ambiente — a sincronização com o
+    # celular nunca rodava, mesmo com a chave certa configurada no Secret do
+    # repositório. cloud_sync.sincronizar_snapshot() já sabe lidar sozinho
+    # com "não configurado" (devolve False sem erro), então chama direto.
+    sincronizado = cloud_sync.sincronizar_snapshot(montar_snapshot_para_celular(dados))
+    status = "ok" if sincronizado else "falhou ou não configurada (sem internet, chave inválida ou Secret ausente)"
+    print(f"[atualizar] Sincronização com o celular: {status}.")
 
     print("[atualizar] Execução concluída com sucesso.")
     return 0
