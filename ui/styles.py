@@ -172,14 +172,41 @@ div[data-testid="stVerticalBlockBorderWrapper"]:hover {{
    exatamente o mesmo layout de colunas do dashboard original. */
 table.tabela-carteira {{ width: 100%; border-collapse: collapse; font-size: 13px; }}
 table.tabela-carteira th {{
-    text-align: left; padding: 8px; color: #9ca3af; font-size: 11px;
+    text-align: left; padding: 10px 8px; color: #9ca3af; font-size: 11px;
     text-transform: uppercase; border-bottom: 1px solid #374151; font-weight: 600;
 }}
-table.tabela-carteira td {{ padding: 8px; border-bottom: 1px solid #27303f; vertical-align: middle; }}
-table.tabela-carteira tr:hover {{ background: rgba(255,255,255,0.02); }}
-table.tabela-carteira tr.linha-alvo {{ border-left: 3px solid {COR_INFO}; }}
+table.tabela-carteira td {{ padding: 10px 8px; border-bottom: 1px solid #27303f; vertical-align: middle; }}
+/* Zebra sutil (2026-09-04, pedido do Diego — "melhorar a estética" da
+   tabela de Posições): tabelas largas como esta (10 colunas) ficam mais
+   fáceis de acompanhar uma linha de ponta a ponta com uma faixa de fundo
+   alternada bem discreta — sem competir com o hover (que continua mais
+   forte) nem com o tom da linha-alvo abaixo. */
+table.tabela-carteira tbody tr:nth-child(even) {{ background: rgba(255,255,255,0.014); }}
+table.tabela-carteira tr:hover {{ background: rgba(255,255,255,0.035) !important; }}
+/* Linha de empresa-alvo (watchlist, ainda não comprada) — antes só a
+   barra azul à esquerda diferenciava; um tom de fundo bem leve (mesmo
+   azul da barra, quase imperceptível) ajuda a "ler" de relance quais
+   linhas são posição de verdade x. só observação, sem disputar atenção
+   com o conteúdo. */
+table.tabela-carteira tr.linha-alvo {{ border-left: 3px solid {COR_INFO}; background: rgba(56,189,248,0.035); }}
+table.tabela-carteira tr.linha-alvo:nth-child(even) {{ background: rgba(56,189,248,0.05); }}
 table.tabela-carteira .ticker {{ font-weight: 700; color: {COR_TEXTO_PRIMARIO}; }}
 table.tabela-carteira .setor {{ font-size: 11px; color: {COR_TEXTO_SECUNDARIO}; }}
+/* Colunas numéricas (2026-09-04): alinhadas à direita — não só mais bonito,
+   é o padrão de qualquer tabela financeira de verdade (StatusInvest, Kinvo,
+   TradeMap), porque deixa comparar magnitude entre linhas num relance só,
+   sem precisar ler cada número. `tabular-nums` trava a largura de cada
+   dígito, então os valores não "dançam" de posição entre linhas — mesma
+   técnica já usada em .card-kpi .valor. */
+table.tabela-carteira th.col-num, table.tabela-carteira td.col-num {{
+    text-align: right; font-variant-numeric: tabular-nums;
+}}
+table.tabela-carteira td.col-num .subcelula {{ text-align: right; }}
+/* Colunas de badge/indicador (Alerta, Indicação, Margem vs Preço Médio) —
+   centralizadas: um badge é curto e de largura variável, então alinhado à
+   esquerda ele "flutua" perto do texto vizinho; centralizado fica ancorado
+   na própria coluna, mais fácil de escanear coluna a coluna. */
+table.tabela-carteira th.col-center, table.tabela-carteira td.col-center {{ text-align: center; }}
 /* Segunda linha, menor, dentro de uma célula que junta duas informações
    relacionadas na mesma coluna (ex: Cotação + Variação do Dia, ou Preço
    Teto + margem de segurança) — 2026-09-02, reduz o nº de colunas da

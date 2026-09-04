@@ -348,10 +348,12 @@ def _tabela_posicoes_html(lista_ativos: list[dict], ocultar_valores: bool) -> No
         linhas.append(
             f'<tr{classe_linha}>'
             f'<td><span class="ticker">{a["ticker"]}{" 🎯" if a["eh_alvo"] else ""}</span>{setor_html}</td>'
-            f'<td>{qtd_html}</td><td>{preco_medio_html}</td><td>{cotacao_celula}</td>'
-            f'<td>{alerta_html}</td>'
-            f'<td>{teto_celula}</td><td>{indicacao_html}</td><td>{margem_pm_html}</td>'
-            f'<td>{total_atual_html}</td><td>{resultado_html}</td>'
+            f'<td class="col-num">{qtd_html}</td><td class="col-num">{preco_medio_html}</td>'
+            f'<td class="col-num">{cotacao_celula}</td>'
+            f'<td class="col-center">{alerta_html}</td>'
+            f'<td class="col-num">{teto_celula}</td>'
+            f'<td class="col-center">{indicacao_html}</td><td class="col-center">{margem_pm_html}</td>'
+            f'<td class="col-num">{total_atual_html}</td><td class="col-num">{resultado_html}</td>'
             f'</tr>'
         )
 
@@ -363,14 +365,24 @@ def _tabela_posicoes_html(lista_ativos: list[dict], ocultar_valores: bool) -> No
     # Teto já vêm com a informação relacionada (Variação do Dia / margem de
     # segurança) empilhada dentro da própria célula — ver comentário acima,
     # em vez de uma coluna própria pra cada uma.
+    #
+    # 2026-09-04 (pedido do Diego, "melhorar a estética"): colunas
+    # numéricas (Qtd/Preço Médio/Cotação/Preço Teto/Total Atual/Resultado)
+    # e de badge (Alerta/Indicação/Margem vs Preço Médio) ganharam a classe
+    # col-num/col-center (ver ui/styles.py) — alinhamento consistente em
+    # vez de tudo colado à esquerda, que é como qualquer tabela financeira
+    # de verdade organiza uma grade densa como esta.
     colunas = [
-        "Ticker / Setor", "Qtd", "Preço Médio", "Cotação Atual", "Alerta", "Preço Teto (margem 20%)",
-        "Indicação", "Margem vs Preço Médio", "Total Atual", "Resultado",
+        ("Ticker / Setor", None), ("Qtd", "col-num"), ("Preço Médio", "col-num"),
+        ("Cotação Atual", "col-num"), ("Alerta", "col-center"), ("Preço Teto (margem 20%)", "col-num"),
+        ("Indicação", "col-center"), ("Margem vs Preço Médio", "col-center"),
+        ("Total Atual", "col-num"), ("Resultado", "col-num"),
     ]
+    cabecalho = "".join(f'<th class="{classe}">{c}</th>' if classe else f'<th>{c}</th>' for c, classe in colunas)
     tabela_html = f"""
     <div class="card-tabela">
     <table class="tabela-carteira">
-        <thead><tr>{''.join(f'<th>{c}</th>' for c in colunas)}</tr></thead>
+        <thead><tr>{cabecalho}</tr></thead>
         <tbody>{''.join(linhas)}</tbody>
     </table>
     </div>

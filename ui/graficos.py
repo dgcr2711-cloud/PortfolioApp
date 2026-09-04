@@ -108,6 +108,16 @@ com uma borda reta, não importa a combinação de dados/range. Aplicado só
 na linha principal de cada gráfico (Patrimônio Atual / Fechamento) — a
 linha de referência (Total Investido, tracejada) continua sem
 preenchimento, pra não sobrepor duas áreas coloridas e poluir a leitura.
+
+2026-09-04 (nova função, mesmo dia — pedido do Diego: "camada por setor
+com um gráfico pequeno pra cada ação lado a lado"): `grafico_sparkline`,
+uma versão minúscula dos gráficos de linha acima — sem eixo, sem legenda,
+sem hover, só a forma da curva — pra caber várias lado a lado num card
+compacto por ativo (ver `ui/visao_geral.py::_render_por_setor`). Reaproveita
+a mesma técnica de trace-piso + `fill="tonexty"` de cima, mas a cor é
+dinâmica por ativo (verde se subiu no período, vermelho se caiu — decidido
+por quem chama), daí o helper `_hex_para_rgba` pra gerar o `fillcolor` a
+partir da cor da linha em vez de uma cor fixa.
 """
 
 from __future__ import annotations
@@ -375,3 +385,61 @@ def grafico_preco_individual(
         yaxis=eixo_y,
     )
     return fig
+
+
+def grafico_sparkline(pontos: list[dict], *, cor: str, altura: int = 56) -> go.Figure:
+    """
+    Mini-gráfico de tendência ("sparkline") — sem eixos, sem legenda, sem
+    hover, só a forma da linha (pedido do Diego, 2026-09-04: "camada por
+    setor com um gráfico pequeno pra cada ação lado a lado"). Usado só nos
+    cards compactos de `ui/visao_geral.py::_card_sparkline_ativo`, dentro
+    do expander "🏭 Por Setor" — um "glance" bem menor que
+    `grafico_preco_individual` (que continua sendo o lugar pra olhar um
+    ativo com detalhe, crosshair e preço-teto, na aba Carteira).
+
+    `cor`: hexadecimal (ex.: "#34d399") — quem chama decide (verde/vermelho
+    conforme a variação do período, ver `_card_sparkline_ativo`), pra ficar
+    óbvio de relance se a ação subiu ou caiu no período sem precisar ler
+    nenhum número.
+
+    Reaproveita a técnica da trace-piso + `fill="tonexty"` (ver docstring
+    do módulo) pro mesmo preenchimento sutil sob a linha dos outros
+    gráficos daqui — o range do eixo Y ainda existe internamente
+    (`_intervalo_eixo_y`, com mais respiro que o padrão porque não há
+    grade/rótulo pra "ancorar" visualmente a curva), só não é desenhado.
+    """
+    fig = go.Figure()
+    fechamentos = [p["fechamento"] for p in pontos]
+    eixo_y_range = _intervalo_eixo_y(fechamentos, margem_pct=0.12)
+
+    # Trace "piso" invisível — mesma técnica dos gráficos de linha acima.
+    fig.add_trace(go.Scatter(
+        y=[eixo_y_range[0]] * len(fechamentos), mode="lines",
+        line=dict(width=0), hoverinfo="skip", showlegend=False,
+    ))
+    fig.add_trace(go.Scatter(
+        y=fechamentos, mode="lines",
+        line=dict(color=cor, width=1.6),
+        fill="tonexty", fillcolor=_hex_para_rgba(cor, 0.16),
+        hoverinfo="skip", showlegend=False,
+    ))
+    fig.update_layout(
+        height=altura, margin=dict(t=2, b=2, l=2, r=2),
+        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+        showlegend=False,
+        xaxis=dict(visible=False, fixedrange=True),
+        yaxis=dict(visible=False, range=eixo_y_range, fixedrange=True),
+    )
+    return fig
+
+
+def _hex_para_rgba(hex_cor: str, alpha: float) -> str:
+    """
+    Converte "#RRGGBB" em "rgba(r,g,b,alpha)" — usado só pelo preenchimento
+    do `grafico_sparkline` acima, cuja cor varia por ativo (verde/vermelho
+    conforme a tendência do período); os outros gráficos deste módulo têm
+    cor fixa, então já escrevem o `rgba(...)` direto sem precisar converter.
+    """
+    hex_cor = hex_cor.lstrip("#")
+    r, g, b = int(hex_cor[0:2], 16), int(hex_cor[2:4], 16), int(hex_cor[4:6], 16)
+    return f"rgba({r},{g},{b},{alpha})"
