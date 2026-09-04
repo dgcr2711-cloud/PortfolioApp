@@ -14,7 +14,10 @@ números com o tempo.
 2026-09-04: adicionado "historicoPrecosAtivos" — histórico diário de
 fechamento por ativo (mesma fonte/cache do "Gráfico do Ativo" da aba
 Carteira do PC), pra alimentar o gráfico equivalente na aba Preço Teto do
-celular (ver _montar_historico_precos_ativos abaixo).
+celular (ver _montar_historico_precos_ativos abaixo). No mesmo dia,
+"mapaDividendos" — mesmos dados do "🗓️ Mapa de Dividendos" da aba
+Proventos do PC (ver _montar_mapa_dividendos abaixo), pedido por Diego pra
+aparecer também no fim da aba Preço Teto do celular.
 """
 
 from __future__ import annotations
@@ -22,6 +25,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
+from core import b3_publico
 from core import calculations as calc
 from core import imposto_renda as ir_calc
 from core import market_data
@@ -29,6 +33,7 @@ from core import portfolio_analytics as analytics
 from core import rebalanceamento as rebal_calc
 from core import risco as risco_calc
 from core import valuation_multiplos
+from core.config import DATA_INICIO_CARTEIRA
 from ui.ativos import montar_lista_ativos
 
 
@@ -336,6 +341,50 @@ def _montar_historico_precos_ativos(lista_ativos: list[dict[str, Any]]) -> list[
     return resultado
 
 
+def _montar_mapa_dividendos(dados: dict[str, Any]) -> dict[str, Any]:
+    """
+    2026-09-04 (Diego pediu pra ver, no fim da aba Preço Teto do celular,
+    "o mapa de dividendos"): mesmos dados do "🗓️ Mapa de Dividendos —
+    histórico mês a mês" da aba Proventos do PC
+    (`ui/proventos.py::_render_mapa_dividendos`) — grade Ticker x Mês,
+    agrupada por setor. "porTicker" cobre tickers com pelo menos 1
+    provento registrado; "somenteAnunciados" cobre tickers que a B3 já
+    anunciou mas Diego nunca registrou manualmente (linha "só automática"
+    no site) — juntos, os dois cobrem exatamente as mesmas linhas que
+    aparecem no mapa do PC.
+
+    Chaves de mês em `contagemPorMes` viram string ("1".."12") de
+    propósito — dict com chave inteira não é um formato natural pra
+    Firestore/JSON, e o celular só precisa indexar por número do mês de
+    qualquer forma.
+    """
+    proventos = dados["proventos"]
+    mapa = calc.mapa_dividendos_por_ticker(proventos, data_minima=DATA_INICIO_CARTEIRA)
+    anunciados = dados.get("proventosAnunciadosB3") or {}
+    meses_auto = b3_publico.meses_anunciados_por_ticker(anunciados, data_minima=DATA_INICIO_CARTEIRA)
+    setores = dados.get("setores", {})
+
+    tickers_com_registro = {item["ticker"] for item in mapa}
+    return {
+        "porTicker": [
+            {
+                "ticker": item["ticker"],
+                "setor": setores.get(item["ticker"]) or "Sem setor definido",
+                "contagemPorMes": {str(mes): contagem for mes, contagem in item["contagem_por_mes"].items()},
+                "mesesAnunciados": meses_auto.get(item["ticker"], []),
+                "valorMedioPorPagamento": item["valor_medio_por_pagamento"],
+                "quantidadePagamentos": item["quantidade_pagamentos"],
+            }
+            for item in mapa
+        ],
+        "somenteAnunciados": [
+            {"ticker": ticker, "setor": setores.get(ticker) or "Sem setor definido", "mesesAnunciados": meses}
+            for ticker, meses in meses_auto.items()
+            if ticker not in tickers_com_registro
+        ],
+    }
+
+
 def montar_snapshot_para_celular(dados: dict[str, Any]) -> dict[str, Any]:
     """Retorna um dicionário "achatado" (fácil de ler em JS/TypeScript), pronto para core.cloud_sync.sincronizar_snapshot()."""
     posicoes = calc.calcular_posicoes_completas(dados["compras"], dados["eventos"], dados["cotacoes"])
@@ -401,6 +450,7 @@ def montar_snapshot_para_celular(dados: dict[str, Any]) -> dict[str, Any]:
         "proventos": _montar_proventos(dados["proventos"], total_investido_atual),
         "precosTeto": _montar_precos_teto(dados.get("precosTeto", {})),
         "historicoPrecosAtivos": _montar_historico_precos_ativos(lista_ativos),
+        "mapaDividendos": _montar_mapa_dividendos(dados),
         "compras": _montar_historico_transacoes(dados["compras"]),
         "impostoRenda": _montar_imposto_renda(dados),
         "teses": _montar_teses(dados.get("teses", {})),

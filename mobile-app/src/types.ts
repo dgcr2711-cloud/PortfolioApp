@@ -218,6 +218,37 @@ export interface HistoricoPrecoAtivo {
   pontos: PontoPreco[];
 }
 
+/**
+ * Linha do "Mapa de Dividendos" pra um ticker com ao menos 1 provento
+ * registrado — `contagemPorMes` usa chave string ("1".."12") de propósito
+ * (ver core/mobile_snapshot.py::_montar_mapa_dividendos).
+ */
+export interface ItemMapaDividendos {
+  ticker: string;
+  setor: string;
+  contagemPorMes: Record<string, number>;
+  mesesAnunciados: number[];
+  valorMedioPorPagamento: number;
+  quantidadePagamentos: number;
+}
+
+/** Ticker que a B3 já anunciou mas Diego nunca registrou manualmente ("linha só automática" no site). */
+export interface ItemMapaSomenteAnunciado {
+  ticker: string;
+  setor: string;
+  mesesAnunciados: number[];
+}
+
+/**
+ * Espelha o "🗓️ Mapa de Dividendos" da aba Proventos do PC — ver
+ * core/mobile_snapshot.py::_montar_mapa_dividendos (2026-09-04). Ausente
+ * em snapshots antigos (de antes desta funcionalidade).
+ */
+export interface MapaDividendos {
+  porTicker: ItemMapaDividendos[];
+  somenteAnunciados: ItemMapaSomenteAnunciado[];
+}
+
 export interface Transacao {
   id: string;
   tipo: 'compra' | 'venda';
@@ -293,6 +324,8 @@ export interface PortfolioSnapshot {
   precosTeto: PrecoTeto[];
   /** Ausente em snapshots antigos (de antes desta funcionalidade). */
   historicoPrecosAtivos?: HistoricoPrecoAtivo[];
+  /** Ausente em snapshots antigos (de antes desta funcionalidade). */
+  mapaDividendos?: MapaDividendos;
   compras: Transacao[];
   impostoRenda: ImpostoRenda;
   /** Ticker -> entradas do Diário de Tese, mais recente primeiro. Ausente em snapshots antigos (de antes desta funcionalidade). */

@@ -15,6 +15,7 @@ import {
 import { addDoc, collection, doc, onSnapshot, serverTimestamp } from 'firebase/firestore';
 import { db } from '../firebase';
 import { GraficoLinhaSvg } from '../components/GraficoLinhaSvg';
+import { MapaDividendos } from '../components/MapaDividendos';
 import { usePortfolioSnapshot } from '../hooks/usePortfolioSnapshot';
 import { cores, espacamento } from '../theme';
 import { formatarDataCompacta, formatarMoeda } from '../format';
@@ -215,7 +216,12 @@ export function PrecoTetoScreen() {
         }
         ListEmptyComponent={<Text style={estilos.aviso}>Nenhum preço teto calculado ainda.</Text>}
         renderItem={({ item }: { item: PrecoTeto }) => <LinhaPrecoTeto item={item} />}
-        ListFooterComponent={<SecaoGraficoAtivo historicoPrecosAtivos={historicoPrecosAtivos} precosTeto={precosTeto} />}
+        ListFooterComponent={
+          <>
+            <SecaoGraficoAtivo historicoPrecosAtivos={historicoPrecosAtivos} precosTeto={precosTeto} />
+            <MapaDividendos mapa={snapshot.mapaDividendos} />
+          </>
+        }
       />
     </KeyboardAvoidingView>
   );
