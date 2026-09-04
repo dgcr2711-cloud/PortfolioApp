@@ -1,0 +1,42 @@
+name: Atualizar dados e verificar alertas em segundo plano
+
+# Roda sozinho, sem precisar do PC ligado — ver
+# scripts/verificar_alertas_segundo_plano.py para tudo que este robô faz
+# (2026-09-05: ampliado para fazer tudo que o botão "🔄 Atualizar Dados" do
+# PC faz, não só verificar alertas — isso é o que elimina a dependência do
+# PC estar ligado para o celular continuar sincronizando).
+#
+# Horário: de 15 em 15 minutos, das 9h às 19h (horário de Brasília), de
+# segunda a sexta — cobre o pregão da B3 com folga de cada lado. Nos fins de
+# semana, roda só 3x por dia (9h, 13h, 17h) — o suficiente para aplicar
+# qualquer pedido feito pelo celular sem esperar até segunda, sem gastar
+# minutos do GitHub Actions à toa (mercado fechado, cotação não muda).
+# Cron do GitHub Actions é sempre em UTC; Brasília = UTC-3 o ano todo (sem
+# horário de verão desde 2019).
+on:
+  schedule:
+    - cron: "*/15 12-22 * * 1-5"
+    - cron: "0 12,16,20 * * 0,6"
+  workflow_dispatch: {}  # permite rodar manualmente em Actions -> Atualizar dados e verificar alertas em segundo plano -> Run workflow
+
+jobs:
+  atualizar-dados:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Baixar o código do repositório
+        uses: actions/checkout@v4
+
+      - name: Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Instalar as bibliotecas do projeto
+        run: pip install -r requirements.txt
+
+      - name: Rodar a atualização completa
+        env:
+          FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+          WHATSAPP_ALERTA_NUMERO: ${{ secrets.WHATSAPP_ALERTA_NUMERO }}
+          WHATSAPP_ALERTA_APIKEY: ${{ secrets.WHATSAPP_ALERTA_APIKEY }}
+        run: python scripts/verificar_alertas_segundo_plano.py

@@ -7,9 +7,12 @@
     "userInterfaceStyle": "dark",
     "backgroundColor": "#111827",
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.diego.meuportfoliob3"
     },
-    "android": {},
+    "android": {
+      "package": "com.diego.meuportfoliob3"
+    },
     "web": {}
   }
 }
