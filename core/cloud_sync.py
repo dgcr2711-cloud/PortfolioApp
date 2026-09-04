@@ -303,7 +303,12 @@ def _sincronizar_snapshot_sem_prazo(snapshot: dict[str, Any]) -> bool:
         db = firestore.client()
         db.collection(COLECAO_FIRESTORE).document(DOCUMENTO_FIRESTORE).set(snapshot, timeout=TIMEOUT_FIRESTORE_SEGUNDOS)
         return True
-    except Exception:
+    except Exception as erro:
+        # 2026-09-04 — diagnóstico temporário: imprime o motivo real da
+        # falha (sem parar nada, sem mudar o retorno False) porque essa
+        # falha estava totalmente muda no log do GitHub Actions — impossível
+        # saber se era permissão, dado inválido ou timeout sem isso.
+        print(f"[cloud_sync] Falha ao sincronizar snapshot com o Firestore: {erro!r}")
         return False
 
 
@@ -331,7 +336,9 @@ def _salvar_dados_completos_na_nuvem_sem_prazo(dados: dict[str, Any]) -> bool:
         db = firestore.client()
         db.collection(COLECAO_FIRESTORE).document(DOCUMENTO_DADOS_COMPLETOS).set(dados, timeout=TIMEOUT_FIRESTORE_SEGUNDOS)
         return True
-    except Exception:
+    except Exception as erro:
+        # 2026-09-04 — mesmo diagnóstico temporário de _sincronizar_snapshot_sem_prazo acima.
+        print(f"[cloud_sync] Falha ao salvar dados completos no Firestore: {erro!r}")
         return False
 
 
