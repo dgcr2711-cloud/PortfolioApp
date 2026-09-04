@@ -10,12 +10,13 @@ ativos — os dois blocos mais densos da tela — passaram a viver dentro de
 visíveis (é o "essencial de bater o olho"); o resto fica a um clique de
 distância, sem sumir de vez.
 
-2026-09-04 (novo expander "🏭 Por Setor", pedido do Diego — "fazer uma
-camada pra cada setor com um gráfico pequeno pra cada ação lado a lado"):
-mesma lógica de divulgação progressiva acima — recolhido por padrão,
-porque busca histórico de preço de TODOS os ativos (uma chamada de rede
-por ticker não cacheada ainda), então só paga esse custo quem realmente
-abrir a seção.
+2026-09-04 (expander "🏭 Por Setor" com sparklines — testado e revertido no
+mesmo dia): cheguei a colocar aqui um bloco de mini-gráficos por ativo
+agrupados por setor; depois de ver funcionando, Diego preferiu ter esses
+cards na aba 📈 Carteira em vez daqui (uma lista só, lado a lado, sem
+agrupar por setor — ver `ui/carteira.py::_secao_sparklines_ativos`), então
+o bloco foi removido desta tela. `grafico_sparkline`/`_hex_para_rgba`
+continuam em `ui/graficos.py` (usados de lá agora).
 """
 
 from __future__ import annotations
@@ -23,12 +24,11 @@ from __future__ import annotations
 import streamlit as st
 
 from core import calculations as calc
-from core import market_data
 from core import portfolio_analytics as analytics
 from core.config import COR_DESTAQUE, COR_NEGATIVO, COR_NEUTRO, COR_POSITIVO
 from core.formatting import formatar_moeda_priv, formatar_numero, formatar_pct
 from ui.ativos import montar_lista_ativos
-from ui.graficos import grafico_alocacao, grafico_evolucao_patrimonial, grafico_sparkline
+from ui.graficos import grafico_alocacao, grafico_evolucao_patrimonial
 from ui.styles import (
     aviso_privacidade_html,
     badge_alerta,
@@ -109,10 +109,6 @@ def render(dados: dict, ocultar_valores: bool) -> None:
     # "divulgação progressiva"): quem só quer bater o olho no patrimônio e
     # nos gráficos não precisa rolar a tela toda pra chegar lá embaixo, mas
     # nada foi removido — é só um clique de distância.
-    if lista_ativos:
-        with st.expander(f"🏭 Por Setor — mini-gráficos de tendência ({len(lista_ativos)} ativos)"):
-            _render_por_setor(lista_ativos)
-
     if posicoes:
         with st.expander("🏛️ Diagnóstico da Carteira (concentração, setores, CAGR, fundamentos)"):
             _render_diagnostico_carteira(dados, posicoes)
@@ -263,92 +259,6 @@ def _render_graficos_resumo(dados: dict, posicoes: list[dict], ocultar_valores: 
                 # diferente lado a lado, mesmo com o mesmo layout de colunas.
                 fig = grafico_evolucao_patrimonial(historico, altura=300, legenda=False)
                 st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
-
-
-def _render_por_setor(lista_ativos: list[dict]) -> None:
-    """
-    Visão "por setor" (pedido do Diego, 2026-09-04 — "fazer uma camada pra
-    cada setor e deixar um card bonito e apresentável com um gráfico
-    pequeno pra cada ação de cada setor lado a lado"): agrupa os mesmos
-    ativos de `_render_tabela_ativos` (posições + alvo) por `setor` e
-    mostra um card compacto com sparkline por ativo, lado a lado dentro de
-    cada setor — complementa o donut de Alocação (que mostra peso em
-    R$/%) com "como cada ação andou no último mês", de relance. Escolhida
-    entre 3 opções apresentadas ao Diego (linha única sobreposta / cards
-    com sparkline / mini-área expansível) — ele preferiu os sparklines
-    compactos.
-
-    Setores com mais ativos aparecem primeiro (é onde a comparação lado a
-    lado tem mais valor); "— Sem setor" (ativo sem entrada em
-    `dados["setores"]`) sempre por último.
-    """
-    if not lista_ativos:
-        return
-
-    por_setor: dict[str, list[dict]] = {}
-    for ativo in lista_ativos:
-        setor = ativo.get("setor") or "— Sem setor"
-        por_setor.setdefault(setor, []).append(ativo)
-
-    setores_ordenados = sorted(
-        (s for s in por_setor if s != "— Sem setor"),
-        key=lambda s: (-len(por_setor[s]), s),
-    )
-    if "— Sem setor" in por_setor:
-        setores_ordenados.append("— Sem setor")
-
-    with st.spinner("Carregando histórico de preços por setor..."):
-        for indice, setor in enumerate(setores_ordenados):
-            ativos_do_setor = por_setor[setor]
-            st.markdown(f"**{setor}** &nbsp;·&nbsp; {len(ativos_do_setor)} ativo(s)")
-            colunas = st.columns(len(ativos_do_setor))
-            for col, ativo in zip(colunas, ativos_do_setor):
-                with col:
-                    _card_sparkline_ativo(ativo)
-            if indice < len(setores_ordenados) - 1:
-                st.markdown("<div style='height:10px'></div>", unsafe_allow_html=True)
-
-
-def _card_sparkline_ativo(ativo: dict) -> None:
-    """
-    Um card por ativo dentro de `_render_por_setor`: ticker + cotação atual
-    + variação do dia (mesmos números já usados em `_render_tabela_ativos`)
-    + sparkline de 1 mês. Histórico vem de
-    `core.market_data.buscar_historico_preco` (cache de 1h, mesma função já
-    usada pelo gráfico individual da aba Carteira) — pedido aqui com
-    `periodo="1mo"` porque é só uma tendência rápida, não a análise
-    detalhada que já existe em 📈 Carteira.
-    """
-    ticker = ativo["ticker"]
-    with st.container(border=True):
-        rotulo = f'{ticker} 🎯' if ativo["eh_alvo"] else ticker
-        st.markdown(f'<div class="ticker" style="font-size:13px">{rotulo}</div>', unsafe_allow_html=True)
-
-        if ativo["cotacao_atual"] is None:
-            st.caption("— sem cotação")
-            return
-
-        variacao = ativo.get("variacao_dia_pct")
-        cor_var = COR_POSITIVO if (variacao or 0) >= 0 else COR_NEGATIVO
-        sinal = "+" if (variacao or 0) >= 0 else ""
-        st.markdown(
-            f'<div style="font-size:15px;font-weight:700;font-variant-numeric:tabular-nums">'
-            f'{formatar_moeda_priv(ativo["cotacao_atual"], False)}</div>'
-            f'<div style="font-size:12px;color:{cor_var};font-weight:600">'
-            f'{sinal}{formatar_pct(variacao) if variacao is not None else "—"}</div>',
-            unsafe_allow_html=True,
-        )
-
-        # 1 mês é suficiente pra "tendência recente" — período maior deixaria
-        # o card mais lento pra carregar sem agregar muito a um gráfico deste
-        # tamanho (56px de altura, ver grafico_sparkline).
-        pontos = market_data.buscar_historico_preco(ticker, "1mo")
-        if pontos and len(pontos) >= 2:
-            cor_linha = COR_POSITIVO if pontos[-1]["fechamento"] >= pontos[0]["fechamento"] else COR_NEGATIVO
-            fig = grafico_sparkline(pontos, cor=cor_linha)
-            st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
-        else:
-            st.caption("Sem histórico suficiente")
 
 
 def _render_diagnostico_carteira(dados: dict, posicoes: list[dict]) -> None:

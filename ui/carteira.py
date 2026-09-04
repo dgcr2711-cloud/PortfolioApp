@@ -12,6 +12,15 @@ o usuário escolhe um ticker da lista e vê um gráfico limpo (linha de
 fechamento, com o preço-teto como referência) só daquele ativo — menos
 informação simultânea na tela, sem perder a possibilidade de olhar cada
 ativo de perto.
+
+2026-09-04 (cards de sparkline, "📊 Visão Rápida" — pedido do Diego): testei
+primeiro um bloco parecido na Visão Geral, agrupado por setor; depois de
+ver funcionando ele preferiu ter isso aqui na Carteira em vez de lá — uma
+lista só (sem agrupar por setor, já que aqui o usuário já está olhando
+ativo por ativo), lado a lado, convivendo com o gráfico grande de UM
+ativo (`_secao_grafico_individual`) que continua logo acima: os cards dão
+o "raio-x" rápido de todos de uma vez, o gráfico grande continua sendo o
+lugar pra detalhe (preço-teto, período maior) de um ativo específico.
 """
 
 from __future__ import annotations
@@ -21,11 +30,11 @@ import streamlit as st
 from core import calculations as calc
 from core import market_data
 from core import rebalanceamento as rebal
-from core.config import SETORES_PADRAO
+from core.config import COR_NEGATIVO, COR_POSITIVO, SETORES_PADRAO
 from core.formatting import formatar_moeda_priv, formatar_pct, mascarar_qtd
 from ui.acoes_comuns import atualizar_dados, exibir_aviso_cotacoes_antigas, exibir_status_cotacoes
 from ui.ativos import montar_lista_ativos
-from ui.graficos import grafico_preco_individual
+from ui.graficos import grafico_preco_individual, grafico_sparkline
 from ui.styles import badge_alerta, badge_html, badge_indicacao, badge_variacao_dia, card_kpi_html, render_cards
 
 
@@ -90,6 +99,8 @@ def _aba_posicoes_e_grafico(dados: dict, ocultar_valores: bool, posicoes: list[d
     lista_ativos = montar_lista_ativos(dados)
 
     _secao_grafico_individual(lista_ativos)
+
+    _secao_sparklines_ativos(lista_ativos)
 
     st.subheader("📌 Suas Posições")
     with st.form("form_empresa_alvo", clear_on_submit=True, border=False):
@@ -177,6 +188,77 @@ def _secao_grafico_individual(lista_ativos: list[dict]) -> None:
         fig = grafico_preco_individual(pontos, preco_teto_com_margem=ativo.get("preco_teto_com_margem"), altura=420)
         st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
         st.caption("Fonte: Yahoo Finance — fechamento diário.")
+
+
+# Máximo de cards por linha nos sparklines abaixo — com muitos ativos numa
+# linha só, cada coluna do Streamlit fica estreita demais (texto/gráfico
+# espremidos); quebrando em linhas de até 5, cada card mantém um tamanho
+# legível e ainda fica "lado a lado" dentro da própria linha.
+_MAX_SPARKLINES_POR_LINHA = 5
+
+
+def _secao_sparklines_ativos(lista_ativos: list[dict]) -> None:
+    """
+    Cards compactos com sparkline por ativo, lado a lado (pedido do Diego,
+    2026-09-04 — "um gráfico igual o que você fez, otimizando os dados num
+    card fechado, um ao lado do outro"): dá o "raio-x" visual de todos os
+    ativos de uma vez (tendência de 1 mês + cotação + variação do dia),
+    sem competir com `_secao_grafico_individual` acima — que continua
+    sendo o lugar de olhar UM ativo com detalhe (preço-teto, período maior
+    escolhível). Ordem é a mesma de `lista_ativos` (posições primeiro,
+    depois empresas-alvo, ambas na ordem de `ui.ativos.montar_lista_ativos`).
+    """
+    if not lista_ativos:
+        return
+    st.subheader("📊 Visão Rápida")
+    with st.spinner("Carregando histórico de preços..."):
+        for inicio in range(0, len(lista_ativos), _MAX_SPARKLINES_POR_LINHA):
+            grupo = lista_ativos[inicio : inicio + _MAX_SPARKLINES_POR_LINHA]
+            colunas = st.columns(_MAX_SPARKLINES_POR_LINHA)
+            for col, ativo in zip(colunas, grupo):
+                with col:
+                    _card_sparkline_ativo(ativo)
+
+
+def _card_sparkline_ativo(ativo: dict) -> None:
+    """
+    Um card por ativo: ticker + cotação atual + variação do dia (mesmos
+    números já mostrados na tabela de Posições abaixo) + sparkline de 1
+    mês. Histórico vem de `core.market_data.buscar_historico_preco` (cache
+    de 1h, mesma função já usada por `_secao_grafico_individual` acima) —
+    pedido aqui com `periodo="1mo"` porque é só uma tendência rápida, não
+    a análise detalhada do gráfico grande.
+    """
+    ticker = ativo["ticker"]
+    with st.container(border=True):
+        rotulo = f'{ticker} 🎯' if ativo["eh_alvo"] else ticker
+        st.markdown(f'<div class="ticker" style="font-size:13px">{rotulo}</div>', unsafe_allow_html=True)
+
+        if ativo["cotacao_atual"] is None:
+            st.caption("— sem cotação")
+            return
+
+        variacao = ativo.get("variacao_dia_pct")
+        cor_var = COR_POSITIVO if (variacao or 0) >= 0 else COR_NEGATIVO
+        sinal = "+" if (variacao or 0) >= 0 else ""
+        st.markdown(
+            f'<div style="font-size:15px;font-weight:700;font-variant-numeric:tabular-nums">'
+            f'{formatar_moeda_priv(ativo["cotacao_atual"], False)}</div>'
+            f'<div style="font-size:12px;color:{cor_var};font-weight:600">'
+            f'{sinal}{formatar_pct(variacao) if variacao is not None else "—"}</div>',
+            unsafe_allow_html=True,
+        )
+
+        # 1 mês é suficiente pra "tendência recente" — período maior deixaria
+        # o card mais lento pra carregar sem agregar muito a um gráfico deste
+        # tamanho (56px de altura, ver ui/graficos.py::grafico_sparkline).
+        pontos = market_data.buscar_historico_preco(ticker, "1mo")
+        if pontos and len(pontos) >= 2:
+            cor_linha = COR_POSITIVO if pontos[-1]["fechamento"] >= pontos[0]["fechamento"] else COR_NEGATIVO
+            fig = grafico_sparkline(pontos, cor=cor_linha)
+            st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+        else:
+            st.caption("Sem histórico suficiente")
 
 
 def _secao_rebalanceamento(dados: dict, ocultar_valores: bool, posicoes: list[dict], salvar) -> None:
