@@ -44,6 +44,8 @@ no log do GitHub Actions e qual código de saída devolver.
 
 from __future__ import annotations
 
+import json
+import os
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -100,7 +102,52 @@ def _atualizar_proventos_b3_sem_tela(dados: dict, forcar: bool = False) -> None:
     print(f"[atualizar] Proventos anunciados pela B3 atualizados para {len(anunciados)} ativo(s).")
 
 
+def _diagnosticar_credencial_firebase() -> None:
+    """
+    Diagnóstico TEMPORÁRIO (2026-09-04): a leitura E a escrita no Firestore
+    estão falhando silenciosamente neste script rodando no GitHub Actions
+    (a carteira sempre volta com a watchlist padrão de conta vazia — nunca
+    os dados reais), o que só é possível se a conexão com o Firebase nunca
+    chegar a se estabelecer aqui. Isto imprime só METADADOS sobre o Secret
+    (existe? tamanho? é um JSON válido? tem os campos esperados?) — NUNCA o
+    conteúdo da chave em si — e tenta inicializar o Firebase isoladamente
+    pra capturar a exceção real, que hoje fica escondida porque
+    _garantir_firebase_inicializado() não é chamada dentro de nenhum
+    try/except nos pontos onde é usada.
+    """
+    bruto = os.environ.get("FIREBASE_SERVICE_ACCOUNT_JSON")
+    if not bruto:
+        print("[diagnostico] FIREBASE_SERVICE_ACCOUNT_JSON: variável de ambiente AUSENTE ou vazia neste job.")
+        return
+    print(f"[diagnostico] FIREBASE_SERVICE_ACCOUNT_JSON: presente, {len(bruto)} caracteres.")
+    try:
+        credenciais = json.loads(bruto)
+    except json.JSONDecodeError as erro:
+        print(f"[diagnostico] FIREBASE_SERVICE_ACCOUNT_JSON não é um JSON válido: {erro}")
+        return
+    if not isinstance(credenciais, dict):
+        print(f"[diagnostico] FIREBASE_SERVICE_ACCOUNT_JSON é um JSON válido, mas do tipo {type(credenciais).__name__}, não um objeto.")
+        return
+    campos_esperados = ["type", "project_id", "private_key_id", "private_key", "client_email"]
+    faltando = [campo for campo in campos_esperados if campo not in credenciais]
+    print(f"[diagnostico] JSON válido, chaves presentes: {sorted(credenciais.keys())}.")
+    if faltando:
+        print(f"[diagnostico] Faltando campo(s) esperado(s) de uma chave de conta de serviço: {faltando}.")
+
+    try:
+        import firebase_admin
+        from firebase_admin import credentials
+
+        if not firebase_admin._apps:
+            cred = credentials.Certificate(credenciais)
+            firebase_admin.initialize_app(cred)
+        print("[diagnostico] Firebase inicializado com sucesso a partir da variável de ambiente.")
+    except Exception as erro:
+        print(f"[diagnostico] Falha ao inicializar o Firebase com essa credencial: {erro!r}")
+
+
 def main() -> int:
+    _diagnosticar_credencial_firebase()
     dados = carregar_dados()
 
     # 1. Pedidos pendentes do celular — mesma busca em paralelo já usada
