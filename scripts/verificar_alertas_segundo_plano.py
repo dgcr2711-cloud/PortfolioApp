@@ -77,11 +77,16 @@ from ui.acoes_comuns import _registrar_snapshot  # noqa: E402
 # existe uma tela do Streamlit de verdade rodando — comportamento normal e
 # esperado neste script, não um problema. Não mexe em nenhum outro aviso
 # real (erro de cotação, de Firestore etc.), só neste logger específico.
-# PRECISA vir DEPOIS dos imports acima (não antes): é a própria importação
-# do streamlit (puxada por esses módulos core/ui) que configura o nível
-# desse logger — tentar silenciar antes de importar era sobrescrito
-# silenciosamente por essa configuração interna do streamlit.
-logging.getLogger("streamlit.runtime.caching.cache_data_api").setLevel(logging.ERROR)
+#
+# Por que um Filter, e não logger.setLevel(): já tentei setLevel (antes E
+# depois dos imports) e o aviso continuou aparecendo — o Streamlit
+# reconfigura o nível desse logger por conta própria toda vez que emite o
+# aviso (não só uma vez, na importação), então qualquer setLevel externo é
+# sobrescrito de novo na próxima chamada. Testei isso isoladamente (mesmo
+# simulando esse comportamento "teimoso") e confirmei: um logging.Filter
+# anexado direto no logger sobrevive a isso, porque é checado depois que a
+# lib decide logar, não depende do nível dela ficar como eu quero.
+logging.getLogger("streamlit.runtime.caching.cache_data_api").addFilter(lambda registro: False)
 
 
 def _atualizar_proventos_b3_sem_tela(dados: dict, forcar: bool = False) -> None:

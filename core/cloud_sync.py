@@ -286,9 +286,21 @@ def _garantir_firebase_inicializado() -> bool:
     import firebase_admin
     from firebase_admin import credentials
 
-    if not firebase_admin._apps:
-        cred = credentials.Certificate(origem_credenciais)
-        firebase_admin.initialize_app(cred)
+    try:
+        if not firebase_admin._apps:
+            cred = credentials.Certificate(origem_credenciais)
+            firebase_admin.initialize_app(cred)
+    except Exception as erro:
+        # 2026-09-05 — antes essa exceção (ex: credencial com campo
+        # faltando/formato errado) não era pega em NENHUM lugar: ela
+        # atravessava direto pra thread do _rodar_com_prazo_total (que só
+        # devolve valor_padrao quando a função *termina* dentro do prazo,
+        # não quando lança uma exceção) e virava um traceback cru de
+        # "Exception in thread" no log, um por chamada — sem nunca dizer
+        # com clareza que o problema era a credencial. Agora cai limpo em
+        # "não configurado", igual às outras duas fontes de credencial.
+        print(f"[cloud_sync] Credencial do Firebase inválida: {erro!r}")
+        return False
     _app_inicializado = True
     return True
 
@@ -422,9 +434,20 @@ def _buscar_pendencias_pendentes_sem_prazo(colecao: str) -> list[dict[str, Any]]
         return []
     try:
         from firebase_admin import firestore
+        from google.cloud.firestore_v1.base_query import FieldFilter
 
         db = firestore.client()
-        documentos = db.collection(colecao).where("status", "==", "pendente").stream(timeout=TIMEOUT_FIRESTORE_SEGUNDOS)
+        # 2026-09-05 — .where("status", "==", "pendente") (3 argumentos
+        # posicionais) é a API antiga do google-cloud-firestore; funciona,
+        # mas gera um UserWarning em TODO log só de existir. FieldFilter é
+        # a forma atual — elimina o aviso na raiz (não é só cosmético:
+        # a forma antiga também será removida numa versão futura da
+        # biblioteca, então trocar agora evita quebrar o robô mais adiante).
+        documentos = (
+            db.collection(colecao)
+            .where(filter=FieldFilter("status", "==", "pendente"))
+            .stream(timeout=TIMEOUT_FIRESTORE_SEGUNDOS)
+        )
         pendencias = []
         for documento in documentos:
             item = documento.to_dict() or {}
