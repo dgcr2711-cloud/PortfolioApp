@@ -51,6 +51,58 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
+# 2026-09-05 — dois ajustes que precisam vir ANTES de qualquer outro import
+# (inclusive antes de "from core import ..." logo abaixo, porque cloud_sync
+# importa firebase_admin/grpc por dentro de função, na primeira vez que for
+# chamada — o que já acontece já na primeira linha de main()):
+#
+# 1) Log SEM buffer: por padrão, quando a saída não é um terminal de verdade
+#    (exatamente o caso do GitHub Actions, que captura a saída por um pipe),
+#    o Python usa buffer "de bloco" pro stdout — várias linhas de print()
+#    só aparecem de uma vez, muito depois de terem realmente acontecido, com
+#    o MESMO horário registrado no log pra todas. Foi isso que fez um log
+#    real (baixado em 2026-09-04) mostrar 6 prints diferentes — desde
+#    "Firebase inicializado com sucesso" até "Falha ao salvar... Firestore"
+#    — todos no mesmíssimo milissegundo, escondendo COMPLETAMENTE quanto
+#    tempo cada etapa levou de verdade. Sem isso corrigido, é impossível
+#    diagnosticar onde o tempo (e uma eventual trava) está acontecendo.
+try:
+    sys.stdout.reconfigure(line_buffering=True)
+    sys.stderr.reconfigure(line_buffering=True)
+except (AttributeError, ValueError, OSError):
+    # 2026-09-05 — descoberto testando de verdade (não só no GitHub Actions:
+    # também rodando com a saída redirecionada, como um teste automatizado
+    # faz): nem todo objeto que se comporta como stdout/stderr tem
+    # `.reconfigure()` (ex: um StringIO usado por um teste). Isto aqui é só
+    # uma melhoria de diagnóstico (ver comentário abaixo) — nunca pode ser o
+    # motivo de o script inteiro travar antes mesmo de começar a atualizar
+    # os dados de verdade.
+    pass
+
+# 2) DNS "nativo" pro gRPC: a biblioteca do Firebase/Firestore fala com o
+#    Google por gRPC, que por padrão usa seu PRÓPRIO resolvedor de DNS
+#    (c-ares), em vez do resolvedor do sistema operacional — e esse
+#    resolvedor embutido tem um histórico bem documentado (issues abertas
+#    nos repositórios oficiais googleapis/google-cloud-python e
+#    grpc/grpc) de ficar preso por dezenas de segundos, ou falhar
+#    silenciosamente, especificamente dentro de containers Linux
+#    restritos/sandboxed — exatamente o ambiente de uma runner do GitHub
+#    Actions. Isso bate com dois sintomas vistos no log real: (a) uma pausa
+#    de ~62s sem NENHUMA saída logo antes do diagnóstico do Firebase
+#    aparecer, e (b) a escrita no Firestore falhando com
+#    "RetryError('Timeout of 60.0s exceeded')" mesmo com um `timeout=` bem
+#    menor (10s) passado direto pra chamada — porque esse `timeout=` só
+#    limita CADA tentativa individual; o prazo TOTAL de 60s pra desistir de
+#    tentar de novo é um padrão interno da própria biblioteca do Google,
+#    que só é atingido se as tentativas individuais estiverem MESMO
+#    falhando (ex: por causa desse DNS travando/errando). Forçar o
+#    resolvedor nativo do sistema operacional (que a runner do GitHub já
+#    sabe resolver DNS sem problema, como qualquer navegador comum) é a
+#    correção padrão recomendada pelo próprio Google pra esse exato quadro
+#    de sintomas — precisa estar definida ANTES da primeira vez que o gRPC
+#    é carregado (por isso aqui em cima, antes de qualquer outro import).
+os.environ.setdefault("GRPC_DNS_RESOLVER", "native")
+
 # Permite rodar este script diretamente (python scripts/verificar_alertas_segundo_plano.py)
 # sem precisar instalar o projeto como pacote — mesmo truque usado em app.py.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -281,4 +333,24 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    _codigo_saida = main()
+
+    # 2026-09-05 — a execução real terminou aqui (tudo já foi salvo antes
+    # disso), mas um `raise SystemExit(...)` normal ESPERA todas as threads
+    # não-daemon do processo terminarem sozinhas antes de sair de verdade —
+    # e a biblioteca de rede do Google (gRPC, usada por trás do Firestore)
+    # mantém suas próprias threads internas de gerenciamento de conexão
+    # rodando em segundo plano, que não são daemon e podem demorar MINUTOS
+    # pra encerrar sozinhas. Foi exatamente isso que fez uma execução real
+    # (2026-09-04) aparecer com "4m 42s" de duração no GitHub Actions mesmo
+    # com "[atualizar] Execução concluída com sucesso." já impresso — o
+    # trabalho de verdade tinha acabado em segundos; o resto do tempo foi só
+    # esperando essas threads internas do gRPC. `os._exit()` encerra o
+    # processo imediatamente, sem esperar nenhuma thread — seguro aqui
+    # porque não há nada pendente pra terminar (nenhum arquivo aberto pra
+    # fechar, nenhuma escrita pendente: tudo já foi salvo em main() antes de
+    # chegar neste ponto). Os flushes abaixo garantem que a última linha
+    # impressa não fique presa no buffer sem nunca aparecer no log.
+    sys.stdout.flush()
+    sys.stderr.flush()
+    os._exit(_codigo_saida)
