@@ -29,4 +29,11 @@ declare module 'react-native-svg' {
   export class Path extends Component<any> {}
   export class Rect extends Component<any> {}
   export class Text extends Component<any> {}
+  // 2026-09-04 (GraficoLinhaSvg.tsx — gráfico de linha da Evolução e do
+  // Preço Teto): componentes extras da lib de verdade que este stub ainda
+  // não tinha, porque nenhum componente daqui os usava até agora.
+  export class Line extends Component<any> {}
+  export class Defs extends Component<any> {}
+  export class LinearGradient extends Component<any> {}
+  export class Stop extends Component<any> {}
 }

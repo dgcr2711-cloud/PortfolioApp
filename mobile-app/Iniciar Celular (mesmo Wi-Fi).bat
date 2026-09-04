@@ -18,5 +18,7 @@ if not exist "node_modules\react-native-svg" (
     echo.
 )
 
-npx expo start
+REM -c limpa o cache do empacotador (Metro) antes de abrir — evita o app no
+REM celular ficar preso numa versão antiga em cache mesmo após atualizações.
+npx expo start -c
 pause

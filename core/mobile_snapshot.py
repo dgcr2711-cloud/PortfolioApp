@@ -10,6 +10,11 @@ core/portfolio_analytics.py já usadas (e testadas) na tela do PC. Isso
 evita duplicar fórmulas financeiras em duas linguagens/plataformas
 diferentes, que é a forma mais comum de dois apps "desencontrarem" os
 números com o tempo.
+
+2026-09-04: adicionado "historicoPrecosAtivos" — histórico diário de
+fechamento por ativo (mesma fonte/cache do "Gráfico do Ativo" da aba
+Carteira do PC), pra alimentar o gráfico equivalente na aba Preço Teto do
+celular (ver _montar_historico_precos_ativos abaixo).
 """
 
 from __future__ import annotations
@@ -19,6 +24,7 @@ from typing import Any
 
 from core import calculations as calc
 from core import imposto_renda as ir_calc
+from core import market_data
 from core import portfolio_analytics as analytics
 from core import rebalanceamento as rebal_calc
 from core import risco as risco_calc
@@ -308,6 +314,28 @@ def _montar_imposto_renda(dados: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _montar_historico_precos_ativos(lista_ativos: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """
+    2026-09-04 (Diego pediu pra ver, na aba Preço Teto do celular, "o
+    gráfico que temos no site em carteira"): histórico diário de
+    fechamento por ativo, mesmo período padrão (6 meses) do "Gráfico do
+    Ativo" da aba Carteira do PC — usa a MESMA função e cache de
+    `ui/carteira.py::_secao_grafico_individual`
+    (`core.market_data.buscar_historico_preco`, cache de 1h — ver
+    CACHE_TTL_HISTORICO_PRECO_SEGUNDOS em core/config.py), então
+    sincronizar algumas vezes seguidas não bate no Yahoo Finance de novo à
+    toa. Ativos sem histórico disponível (falha de rede pontual, ticker
+    não encontrado) simplesmente não entram na lista — o celular trata
+    como "sem gráfico disponível para este ativo".
+    """
+    resultado = []
+    for ativo in lista_ativos:
+        pontos = market_data.buscar_historico_preco(ativo["ticker"], "6mo")
+        if pontos:
+            resultado.append({"ticker": ativo["ticker"], "pontos": pontos})
+    return resultado
+
+
 def montar_snapshot_para_celular(dados: dict[str, Any]) -> dict[str, Any]:
     """Retorna um dicionário "achatado" (fácil de ler em JS/TypeScript), pronto para core.cloud_sync.sincronizar_snapshot()."""
     posicoes = calc.calcular_posicoes_completas(dados["compras"], dados["eventos"], dados["cotacoes"])
@@ -372,6 +400,7 @@ def montar_snapshot_para_celular(dados: dict[str, Any]) -> dict[str, Any]:
         "rebalanceamento": _montar_rebalanceamento(posicoes, dados.get("metasAlocacao", {})),
         "proventos": _montar_proventos(dados["proventos"], total_investido_atual),
         "precosTeto": _montar_precos_teto(dados.get("precosTeto", {})),
+        "historicoPrecosAtivos": _montar_historico_precos_ativos(lista_ativos),
         "compras": _montar_historico_transacoes(dados["compras"]),
         "impostoRenda": _montar_imposto_renda(dados),
         "teses": _montar_teses(dados.get("teses", {})),

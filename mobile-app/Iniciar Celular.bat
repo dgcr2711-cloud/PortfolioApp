@@ -32,5 +32,10 @@ echo  Wi-Fi) como alternativa.
 echo ============================================================
 echo.
 
-npx expo start --tunnel
+REM -c limpa o cache do empacotador (Metro) antes de abrir — sem isso, às
+REM vezes uma mudança recente no app não aparece no celular mesmo depois de
+REM fechar e abrir de novo, porque ele reaproveita uma versão antiga
+REM guardada em cache. Deixa a abertura alguns segundos mais lenta, mas
+REM garante que o celular sempre pega a versão mais nova de verdade.
+npx expo start --tunnel -c
 pause

@@ -48,6 +48,18 @@ export function formatarData(dataIso: string | null | undefined): string {
   return `${dia}/${mes}/${ano}`;
 }
 
+/**
+ * Data compacta "MM/AA" (2026-09-04) — mesmo formato usado no eixo X do
+ * "Gráfico do Ativo" e da Evolução Patrimonial do site (ver
+ * ui/graficos.py::_eixos_com_crosshair, tickformat="%m/%y"), pra não
+ * lotar o eixo do gráfico com datas completas.
+ */
+export function formatarDataCompacta(dataIso: string | null | undefined): string {
+  if (!dataIso || dataIso.length < 7) return '—';
+  const [ano, mes] = dataIso.slice(0, 7).split('-');
+  return `${mes}/${ano.slice(2)}`;
+}
+
 export function formatarDataHora(isoString: string | null | undefined): string {
   if (!isoString) return '—';
   const data = new Date(isoString);

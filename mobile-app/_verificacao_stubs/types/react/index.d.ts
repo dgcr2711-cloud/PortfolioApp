@@ -27,6 +27,11 @@
 declare namespace React {
   type ReactNode = any;
   type FC<P = any> = (props: P) => any;
+  // 2026-09-04 (GraficoLinhaSvg.tsx — mesmo cast usado em
+  // GraficoDonutAlocacao.tsx pros componentes de react-native-svg):
+  // faltava no stub, só usado como tipo do cast `as unknown as
+  // React.ComponentType<any>`, nunca instanciado de verdade aqui.
+  type ComponentType<P = any> = (props: P) => any;
   type Dispatch<A> = (value: A) => void;
   type SetStateAction<S> = S | ((prevState: S) => S);
 }
@@ -34,6 +39,7 @@ declare namespace React {
 declare module 'react' {
   export type ReactNode = React.ReactNode;
   export type FC<P = any> = React.FC<P>;
+  export type ComponentType<P = any> = React.ComponentType<P>;
   export type Dispatch<A> = React.Dispatch<A>;
   export type SetStateAction<S> = React.SetStateAction<S>;
 

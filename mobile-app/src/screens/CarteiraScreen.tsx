@@ -4,6 +4,7 @@ import { usePortfolioSnapshot } from '../hooks/usePortfolioSnapshot';
 import { useEspacoTopo } from '../hooks/useEspacoTopo';
 import { Badge, BadgeIndicacao } from '../components/Badge';
 import { BotaoOcultarValores } from '../components/BotaoOcultarValores';
+import { Expansor } from '../components/Expansor';
 import { useOcultarValores } from '../contexts/OcultarValoresContext';
 import { cores, espacamento } from '../theme';
 import { formatarMoeda, formatarMoedaPriv, formatarPct, mascararQtd } from '../format';
@@ -69,10 +70,10 @@ export function CarteiraScreen() {
         data={snapshot.ativos}
         keyExtractor={(item: Ativo) => item.ticker}
         contentContainerStyle={estilos.lista}
-        ListHeaderComponent={<BlocoRebalanceamento rebalanceamento={snapshot.rebalanceamento ?? null} />}
         renderItem={({ item }: { item: Ativo }) => (
           <CartaoAtivo ativo={item} expandido={expandidos.has(item.ticker)} aoAlternar={() => alternar(item.ticker)} />
         )}
+        ListFooterComponent={<BlocoRebalanceamento rebalanceamento={snapshot.rebalanceamento ?? null} />}
       />
     </View>
   );
@@ -83,6 +84,13 @@ export function CarteiraScreen() {
  * do PC — mesmos desvios já calculados no snapshot (core/rebalanceamento.py),
  * nenhuma conta refeita aqui. Quem define as metas continua sendo o PC:
  * o celular só mostra o resultado.
+ *
+ * 2026-09-04 (Diego pediu pra "relocar as metas de alocação para baixo,
+ * com filtro para abrir somente quando quiser"): antes ficava sempre
+ * visível no TOPO da lista (`ListHeaderComponent`); agora fica no FIM
+ * (`ListFooterComponent`, ver render() acima) e dentro de um `Expansor`
+ * fechado por padrão — mesmo padrão do "⚙️ Definir metas" do site
+ * (`st.expander`), só abre quando o usuário toca.
  */
 function BlocoRebalanceamento({ rebalanceamento }: { rebalanceamento: Rebalanceamento | null }) {
   const { ocultarValores } = useOcultarValores();
@@ -92,8 +100,7 @@ function BlocoRebalanceamento({ rebalanceamento }: { rebalanceamento: Rebalancea
   }
 
   return (
-    <View style={estilos.blocoRebalanceamento}>
-      <Text style={estilos.tituloRebalanceamento}>🎯 Metas de Alocação</Text>
+    <Expansor titulo="🎯 Metas de Alocação">
       {rebalanceamento.desvios.map((d) => {
         const acao = d.valorAjuste < 0 ? 'Vender' : 'Comprar';
         const sinal = d.desvioPp >= 0 ? '+' : '';
@@ -113,7 +120,7 @@ function BlocoRebalanceamento({ rebalanceamento }: { rebalanceamento: Rebalancea
           </View>
         );
       })}
-    </View>
+    </Expansor>
   );
 }
 
@@ -241,15 +248,6 @@ const estilos = StyleSheet.create({
   campo: { minWidth: '40%' },
   rotuloCampo: { color: cores.textoApagado, fontSize: 10, textTransform: 'uppercase', letterSpacing: 0.3 },
   valorCampo: { fontSize: 14, fontWeight: '600', marginTop: 2 },
-  blocoRebalanceamento: {
-    backgroundColor: cores.fundoCard,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: cores.borda,
-    padding: espacamento.lg,
-    marginBottom: espacamento.md,
-  },
-  tituloRebalanceamento: { color: cores.destaque, fontSize: 12, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: espacamento.sm },
   linhaRebalanceamento: {
     flexDirection: 'row',
     justifyContent: 'space-between',

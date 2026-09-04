@@ -5,6 +5,7 @@ import {
   FlatList,
   KeyboardAvoidingView,
   Platform,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -13,10 +14,16 @@ import {
 } from 'react-native';
 import { addDoc, collection, doc, onSnapshot, serverTimestamp } from 'firebase/firestore';
 import { db } from '../firebase';
+import { GraficoLinhaSvg } from '../components/GraficoLinhaSvg';
 import { usePortfolioSnapshot } from '../hooks/usePortfolioSnapshot';
 import { cores, espacamento } from '../theme';
-import { formatarMoeda } from '../format';
-import type { PrecoTeto } from '../types';
+import { formatarDataCompacta, formatarMoeda } from '../format';
+import type { HistoricoPrecoAtivo, PrecoTeto } from '../types';
+
+// Mesma cor da linha de referência de preço-teto do gráfico do site
+// (ui/graficos.py::COR_PRECO_TETO — não faz parte da paleta comum de
+// core/config.py, é específica deste gráfico, então não foi pra theme.ts).
+const COR_PRECO_TETO = '#fbbf24';
 
 /**
  * Espelha a aba 🎯 Preço Teto do PC: lista dos preços-teto já calculados
@@ -132,6 +139,7 @@ export function PrecoTetoScreen() {
   // Fallback pro formato antigo do snapshot (antes desta funcionalidade existir) — evita
   // tela quebrada enquanto o PC ainda não rodou "🔄 Atualizar Dados" com o código novo.
   const precosTeto = snapshot.precosTeto ?? [];
+  const historicoPrecosAtivos = snapshot.historicoPrecosAtivos ?? [];
 
   return (
     <KeyboardAvoidingView style={estilos.container} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
@@ -207,8 +215,71 @@ export function PrecoTetoScreen() {
         }
         ListEmptyComponent={<Text style={estilos.aviso}>Nenhum preço teto calculado ainda.</Text>}
         renderItem={({ item }: { item: PrecoTeto }) => <LinhaPrecoTeto item={item} />}
+        ListFooterComponent={<SecaoGraficoAtivo historicoPrecosAtivos={historicoPrecosAtivos} precosTeto={precosTeto} />}
       />
     </KeyboardAvoidingView>
+  );
+}
+
+/**
+ * "Gráfico do Ativo" (2026-09-04, Diego pediu "o gráfico que temos no
+ * site em Carteira" também aqui, "no fim, para acompanhamento"): mesmo
+ * gráfico de fechamento diário (6 meses) + linha de referência do preço
+ * teto com margem, agora no celular — dados vêm prontos no snapshot
+ * (`historicoPrecosAtivos`, ver core/mobile_snapshot.py), sem o celular
+ * precisar falar com o Yahoo Finance sozinho.
+ */
+function SecaoGraficoAtivo({
+  historicoPrecosAtivos,
+  precosTeto,
+}: {
+  historicoPrecosAtivos: HistoricoPrecoAtivo[];
+  precosTeto: PrecoTeto[];
+}) {
+  const [tickerEscolhido, setTickerEscolhido] = useState<string | null>(null);
+
+  if (historicoPrecosAtivos.length === 0) {
+    return null; // snapshot antigo (sem esse campo) ou nenhum ativo com histórico disponível ainda
+  }
+
+  const tickerAtual = historicoPrecosAtivos.some((h) => h.ticker === tickerEscolhido)
+    ? (tickerEscolhido as string)
+    : historicoPrecosAtivos[0].ticker;
+  const historico = historicoPrecosAtivos.find((h) => h.ticker === tickerAtual);
+  const tetoDoAtivo = precosTeto.find((p) => p.ticker === tickerAtual);
+
+  return (
+    <View style={estilos.blocoGrafico}>
+      <Text style={estilos.subtitulo}>Gráfico do Ativo</Text>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={estilos.chipsContainer}>
+        {historicoPrecosAtivos.map((h) => (
+          <ChipTicker key={h.ticker} rotulo={h.ticker} ativo={h.ticker === tickerAtual} onPress={() => setTickerEscolhido(h.ticker)} />
+        ))}
+      </ScrollView>
+      {historico && historico.pontos.length >= 2 ? (
+        <GraficoLinhaSvg
+          series={[{ valores: historico.pontos.map((p) => p.fechamento), cor: cores.info, preencher: true }]}
+          rotulosX={historico.pontos.map((p) => formatarDataCompacta(p.data))}
+          altura={180}
+          margemPct={0.12}
+          formatarValor={formatarMoeda}
+          linhaReferencia={
+            tetoDoAtivo ? { valor: tetoDoAtivo.precoTetoComMargem, cor: COR_PRECO_TETO, rotulo: 'Preço Teto c/ Margem' } : undefined
+          }
+        />
+      ) : (
+        <Text style={estilos.aviso}>Sem histórico de preço suficiente para {tickerAtual} ainda.</Text>
+      )}
+      <Text style={estilos.legendaGrafico}>Fonte: Yahoo Finance — fechamento diário, últimos 6 meses.</Text>
+    </View>
+  );
+}
+
+function ChipTicker({ rotulo, ativo, onPress }: { rotulo: string; ativo: boolean; onPress: () => void }) {
+  return (
+    <TouchableOpacity style={[estilos.chip, ativo && estilos.chipAtivo]} onPress={onPress} activeOpacity={0.7}>
+      <Text style={[estilos.textoChip, ativo && estilos.textoChipAtivo]}>{rotulo}</Text>
+    </TouchableOpacity>
   );
 }
 
@@ -288,4 +359,18 @@ const estilos = StyleSheet.create({
   dataSalva: { color: cores.textoApagado, fontSize: 11, marginTop: 2 },
   valorSalvo: { color: cores.texto, fontWeight: '700', fontSize: 14 },
   valorSalvoMargem: { color: cores.textoSecundario, fontSize: 11, marginTop: 2 },
+  blocoGrafico: { marginTop: espacamento.xl },
+  chipsContainer: { gap: espacamento.sm, paddingBottom: espacamento.sm },
+  chip: {
+    paddingVertical: 6,
+    paddingHorizontal: espacamento.md,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: cores.borda,
+    backgroundColor: cores.fundoCard,
+  },
+  chipAtivo: { backgroundColor: 'rgba(212,175,55,0.16)', borderColor: cores.destaque },
+  textoChip: { color: cores.textoSecundario, fontSize: 13, fontWeight: '600' },
+  textoChipAtivo: { color: cores.destaque },
+  legendaGrafico: { color: cores.textoApagado, fontSize: 11, marginTop: espacamento.sm },
 });

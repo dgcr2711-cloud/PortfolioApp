@@ -202,6 +202,22 @@ export interface PrecoTeto {
   atualizadoEm: string | null;
 }
 
+export interface PontoPreco {
+  data: string;
+  fechamento: number;
+}
+
+/**
+ * Histórico diário de fechamento de UM ativo (6 meses), mesma fonte do
+ * "Gráfico do Ativo" da aba Carteira do PC — ver
+ * core/mobile_snapshot.py::_montar_historico_precos_ativos (2026-09-04).
+ * Ausente em snapshots antigos (de antes desta funcionalidade).
+ */
+export interface HistoricoPrecoAtivo {
+  ticker: string;
+  pontos: PontoPreco[];
+}
+
 export interface Transacao {
   id: string;
   tipo: 'compra' | 'venda';
@@ -275,6 +291,8 @@ export interface PortfolioSnapshot {
   rebalanceamento?: Rebalanceamento | null;
   proventos: Proventos;
   precosTeto: PrecoTeto[];
+  /** Ausente em snapshots antigos (de antes desta funcionalidade). */
+  historicoPrecosAtivos?: HistoricoPrecoAtivo[];
   compras: Transacao[];
   impostoRenda: ImpostoRenda;
   /** Ticker -> entradas do Diário de Tese, mais recente primeiro. Ausente em snapshots antigos (de antes desta funcionalidade). */
