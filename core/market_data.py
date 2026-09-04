@@ -282,6 +282,27 @@ def buscar_historico_preco(ticker: str, periodo: str = "6mo") -> list[dict[str, 
     return None
 
 
+def buscar_historicos_precos_em_paralelo(tickers: list[str], periodo: str = "6mo") -> dict[str, list[dict[str, Any]]]:
+    """
+    2026-09-04 — mesmo diagnóstico de performance de atualizar_cotacoes
+    (2026-09-03, ver comentário de _REQUISICOES_SIMULTANEAS acima): buscar
+    o histórico de vários tickers UM DE CADA VEZ (com pausa de retry entre
+    eles) é espera de rede pura, então rodar em paralelo reduz o tempo
+    total quase na mesma proporção do número de tickers. Sem isso,
+    core.mobile_snapshot._montar_historico_precos_ativos chamava
+    buscar_historico_preco em loop sequencial pra cada ativo/alvo da
+    carteira a CADA clique em "🔄 Atualizar Dados" — com ~10 tickers e
+    retry em qualquer falha temporária do Yahoo Finance, isso sozinho
+    conseguia adicionar dezenas de segundos (às vezes deixando o botão
+    "travado"), em cima do tempo que a busca de cotações já levava.
+
+    Devolve só os tickers que tiveram histórico encontrado (mesmo
+    contrato de _buscar_em_paralelo) — quem chama decide o que fazer com
+    um ticker ausente.
+    """
+    return _buscar_em_paralelo(tickers, lambda ticker: buscar_historico_preco(ticker, periodo))
+
+
 def atualizar_cotacoes(tickers: list[str], cotacoes_atuais: dict[str, dict]) -> tuple[dict[str, dict], list[str]]:
     """
     Busca a cotação de cada ticker da lista e devolve um novo dicionário de

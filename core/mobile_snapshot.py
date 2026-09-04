@@ -332,13 +332,17 @@ def _montar_historico_precos_ativos(lista_ativos: list[dict[str, Any]]) -> list[
     toa. Ativos sem histórico disponível (falha de rede pontual, ticker
     não encontrado) simplesmente não entram na lista — o celular trata
     como "sem gráfico disponível para este ativo".
+
+    2026-09-04 (correção no mesmo dia — Diego relatou "Atualizar Dados"
+    travando/muito lento): isso buscava um ticker de cada vez (loop
+    sequencial), exatamente o mesmo problema de performance que
+    atualizar_cotacoes já tinha tido e corrigido em 2026-09-03 — agora usa
+    `market_data.buscar_historicos_precos_em_paralelo`, que roda todas as
+    buscas ao mesmo tempo em vez de uma atrás da outra.
     """
-    resultado = []
-    for ativo in lista_ativos:
-        pontos = market_data.buscar_historico_preco(ativo["ticker"], "6mo")
-        if pontos:
-            resultado.append({"ticker": ativo["ticker"], "pontos": pontos})
-    return resultado
+    tickers = [ativo["ticker"] for ativo in lista_ativos]
+    historicos = market_data.buscar_historicos_precos_em_paralelo(tickers, "6mo")
+    return [{"ticker": ticker, "pontos": historicos[ticker]} for ticker in tickers if ticker in historicos]
 
 
 def _montar_mapa_dividendos(dados: dict[str, Any]) -> dict[str, Any]:

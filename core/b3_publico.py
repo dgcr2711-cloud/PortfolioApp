@@ -45,7 +45,7 @@ from __future__ import annotations
 
 import base64
 import json
-import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date, datetime
 from typing import Any
 
@@ -63,7 +63,21 @@ _CABECALHOS = {
 }
 
 _TIMEOUT_SEGUNDOS = 12
-_PAUSA_ENTRE_TICKERS_SEGUNDOS = 0.4
+
+# 2026-09-04 — Diego relatou "Atualizar Dados" ainda muito lento mesmo
+# depois da correção do histórico de preços (ver core/market_data.py):
+# esta busca (site da B3, atrás de proteção Cloudflare — ver docstring do
+# módulo) rodava um ticker de cada vez, cada um com até
+# _TIMEOUT_SEGUNDOS=12s de espera antes de desistir. Numa carteira com
+# ~10 tickers, se a B3 estiver bloqueando/demorando pra responder, isso
+# sozinho já bastava pra travar o botão por mais de 1 minuto — e, como só
+# roda de verdade 1x por dia (INTERVALO_ATUALIZACAO_PROVENTOS_B3_SEGUNDOS)
+# MAS só marca esse "já rodei hoje" quando pelo menos 1 ticker responde
+# com sucesso (ver comentário em buscar_proventos_anunciados_varios), uma
+# B3 bloqueando tudo fazia essa espera longa se repetir em TODO clique,
+# não só uma vez. Mesmo remédio já aplicado em core/market_data.py
+# (2026-09-03/04): rodar em paralelo em vez de um de cada vez.
+_REQUISICOES_SIMULTANEAS = 5
 
 # Só esses três "label" da B3 viram proventos EM DINHEIRO no app — os
 # demais campos da resposta (stockDividends = bonificação/desdobramento,
@@ -191,8 +205,10 @@ def buscar_proventos_anunciados(ticker: str) -> list[dict[str, Any]]:
 
 def buscar_proventos_anunciados_varios(tickers: list[str]) -> tuple[dict[str, list[dict[str, Any]]], bool]:
     """
-    Busca vários tickers em sequência (com uma pequena pausa entre eles,
-    igual ao resto do app, pra não disparar tudo em rajada).
+    Busca vários tickers ao mesmo tempo (até _REQUISICOES_SIMULTANEAS por
+    vez — 2026-09-04, ver comentário acima: um de cada vez deixava
+    "Atualizar Dados" travado por mais de 1 minuto quando a B3 demorava a
+    responder).
 
     Devolve (resultado, sem_conexao). `resultado` só tem os tickers em que
     algo foi encontrado. `sem_conexao` fica True quando NENHUM ticker
@@ -206,16 +222,24 @@ def buscar_proventos_anunciados_varios(tickers: list[str]) -> tuple[dict[str, li
     """
     resultado: dict[str, list[dict[str, Any]]] = {}
     algum_sucesso = False
-    for indice, ticker in enumerate(tickers):
-        if indice > 0:
-            time.sleep(_PAUSA_ENTRE_TICKERS_SEGUNDOS)
-        sucesso, payload_bruto = _buscar_json_bruto(ticker)
-        if sucesso:
-            algum_sucesso = True
-            encontrados = _parsear_cash_dividends(payload_bruto, ticker)
-            if encontrados:
-                resultado[ticker] = encontrados
-    sem_conexao = bool(tickers) and not algum_sucesso
+    if not tickers:
+        return resultado, False
+
+    with ThreadPoolExecutor(max_workers=min(_REQUISICOES_SIMULTANEAS, len(tickers))) as executor:
+        futuro_por_ticker = {executor.submit(_buscar_json_bruto, ticker): ticker for ticker in tickers}
+        for futuro in as_completed(futuro_por_ticker):
+            ticker = futuro_por_ticker[futuro]
+            try:
+                sucesso, payload_bruto = futuro.result()
+            except Exception:
+                sucesso, payload_bruto = False, None
+            if sucesso:
+                algum_sucesso = True
+                encontrados = _parsear_cash_dividends(payload_bruto, ticker)
+                if encontrados:
+                    resultado[ticker] = encontrados
+
+    sem_conexao = not algum_sucesso
     return resultado, sem_conexao
 
 
