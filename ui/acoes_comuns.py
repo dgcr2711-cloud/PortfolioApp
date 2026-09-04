@@ -23,7 +23,7 @@ from core.pendencias_celular import (
     aplicar_remocoes_do_celular,
     aplicar_teses_do_celular,
 )
-from ui.ativos import montar_lista_ativos
+from ui.ativos import montar_lista_ativos, todos_os_tickers
 
 
 def atualizar_dados(dados: dict, salvar) -> None:
@@ -383,10 +383,27 @@ def exibir_status_cotacoes() -> None:
 
 
 def exibir_aviso_cotacoes_antigas(dados: dict) -> None:
-    """Sinaliza quando a carteira ainda exibe cotações fora da janela esperada."""
+    """
+    Sinaliza quando a carteira ainda exibe cotações fora da janela esperada.
+
+    2026-09 (correção de falso positivo, achado de novo por Diego — o aviso
+    apontava 2 cotações "desatualizadas" de 29/08, mesmo com todo o resto já
+    atualizado hoje): `dados["cotacoes"]` guarda uma entrada por ticker que
+    ALGUM DIA já teve cotação buscada, e nunca é limpo quando o ticker sai
+    das compras/watchlist (ex.: ALOS3, que ainda tem preço-teto/setor
+    configurado de antes mas não é mais posição nem watchlist; ou ITSA4, que
+    não está em lugar nenhum mais) — essas sobras ficam paradas na data em
+    que saíram de uso e nunca são buscadas de novo, então SEMPRE aparecem
+    como desatualizadas, para sempre, mesmo com o app funcionando 100%.
+    Corrigido olhando só os tickers que ainda importam de verdade
+    (`ui.ativos.todos_os_tickers` — posições reais + watchlist).
+    """
     agora = datetime.now()
+    tickers_relevantes = set(todos_os_tickers(dados))
     antigas: list[tuple[str, datetime]] = []
     for ticker, cotacao in dados.get("cotacoes", {}).items():
+        if ticker not in tickers_relevantes:
+            continue
         valor = cotacao.get("atualizadoEm") if isinstance(cotacao, dict) else None
         if not valor:
             continue
