@@ -386,7 +386,12 @@ def _carregar_dados_completos_da_nuvem_sem_prazo() -> dict[str, Any] | None:
         if not documento.exists:
             return None
         return documento.to_dict()
-    except Exception:
+    except Exception as erro:
+        # 2026-09-05 — mesmo diagnóstico das funções de escrita: sem isto,
+        # uma falha aqui (ex: o mesmo timeout de rede visto na escrita) é
+        # invisível — o app só parece estar usando a carteira vazia padrão,
+        # sem nenhuma pista de que a nuvem foi consultada e falhou.
+        print(f"[cloud_sync] Falha ao carregar dados completos do Firestore: {erro!r}")
         return None
 
 

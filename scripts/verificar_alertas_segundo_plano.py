@@ -88,6 +88,19 @@ from ui.acoes_comuns import _registrar_snapshot  # noqa: E402
 # lib decide logar, não depende do nível dela ficar como eu quero.
 logging.getLogger("streamlit.runtime.caching.cache_data_api").addFilter(lambda registro: False)
 
+# 2026-09-05 — aumenta SÓ NESTE SCRIPT (nunca no app do PC, onde alguém
+# está esperando na tela — por isso 12s ali, de propósito, ver comentário
+# em core/cloud_sync.py) o prazo total que cada chamada ao Firestore pode
+# demorar antes de desistir. Motivo: rodando no GitHub Actions, uma
+# gravação chegou a falhar com "RetryError('Timeout of 60.0s exceeded')" —
+# ou seja, a própria biblioteca do Google já esperava até 60s por conta
+# própria, só que nosso prazo de 12s desistia (e "abandonava" a tentativa
+# numa thread órfã) bem antes disso, escondendo o resultado real. Aqui
+# ninguém está olhando pra tela esperando, então não custa nada esperar o
+# tempo que o Google realmente precisa (60s) mais uma margem de segurança.
+cloud_sync.TIMEOUT_TOTAL_CARREGAR_NUVEM_SEGUNDOS = 70
+cloud_sync.TIMEOUT_TOTAL_OPERACAO_FIRESTORE_SEGUNDOS = 70
+
 
 def _atualizar_proventos_b3_sem_tela(dados: dict, forcar: bool = False) -> None:
     """
