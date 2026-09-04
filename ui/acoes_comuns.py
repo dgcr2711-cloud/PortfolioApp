@@ -23,7 +23,7 @@ from core.pendencias_celular import (
     aplicar_remocoes_do_celular,
     aplicar_teses_do_celular,
 )
-from ui.ativos import montar_lista_ativos
+from ui.ativos import montar_lista_ativos, todos_os_tickers
 
 
 def atualizar_dados(dados: dict, salvar) -> None:
@@ -361,10 +361,29 @@ def exibir_status_cotacoes() -> None:
 
 
 def exibir_aviso_cotacoes_antigas(dados: dict) -> None:
-    """Sinaliza quando a carteira ainda exibe cotações fora da janela esperada."""
+    """
+    Sinaliza quando a carteira ainda exibe cotações fora da janela esperada.
+
+    2026-09-04 (Diego reportou o aviso aparecendo sempre no site, mesmo
+    logo depois de clicar "Atualizar Dados"): a checagem olhava TODO
+    `dados["cotacoes"]`, inclusive tickers que ele já removeu da
+    carteira/watchlist (encontrado ao investigar: ALOS3 e ITSA4, com
+    "atualizadoEm" de 29/08 — batendo exatamente com o aviso do print).
+    Como "Atualizar Dados" só busca cotação de quem está ATIVO hoje
+    (`core.market_data.atualizar_cotacoes`, chamado só com posições +
+    watchlist), um ticker removido nunca mais recebe uma cotação nova — a
+    entrada órfã ficava disparando o aviso pra sempre, mesmo sem nenhum
+    problema real de atualização. Agora só considera tickers atualmente
+    ativos (mesmo critério de `ui.ativos.montar_lista_ativos`); as
+    cotações órfãs continuam salvas em disco (não são apagadas — não
+    fazem mal parado ali), só param de ser checadas aqui.
+    """
     agora = datetime.now()
+    tickers_ativos = set(todos_os_tickers(dados))
     antigas: list[tuple[str, datetime]] = []
     for ticker, cotacao in dados.get("cotacoes", {}).items():
+        if ticker not in tickers_ativos:
+            continue
         valor = cotacao.get("atualizadoEm") if isinstance(cotacao, dict) else None
         if not valor:
             continue
