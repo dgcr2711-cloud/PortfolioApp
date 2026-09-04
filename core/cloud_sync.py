@@ -40,6 +40,7 @@ import os
 import shutil
 import stat
 import threading
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any
 
 from core.config import PASTA_RAIZ, PASTA_SEGREDOS
@@ -104,6 +105,55 @@ TIMEOUT_FIRESTORE_SEGUNDOS = 10
 # no pior caso, ele só demora até TIMEOUT_TOTAL_CARREGAR_NUVEM_SEGUNDOS e
 # segue com o arquivo local, exatamente como se a nuvem estivesse fora do ar.
 TIMEOUT_TOTAL_CARREGAR_NUVEM_SEGUNDOS = 12
+
+# 2026-09-04 — Diego relatou "Atualizar Dados" ainda travado/muito lento
+# mesmo depois de paralelizar as buscas de preço (core/market_data.py) e de
+# proventos da B3 (core/b3_publico.py). Investigando de novo: `atualizar_dados`
+# (ui/acoes_comuns.py) começa chamando buscar_pendencias_pendentes() para
+# QUATRO coleções diferentes (compras, remoções, preço-teto, teses) EM
+# SEQUÊNCIA, cada uma só protegida pelo `timeout=` passado direto pro SDK do
+# Firestore (TIMEOUT_FIRESTORE_SEGUNDOS=10s) — 4 x 10s = até 40s só nessa
+# etapa, ANTES de sequer começar a buscar cotações. Bate exatamente com o
+# "já foram 40 seg" relatado.
+#
+# Pior: essa mesma proteção (timeout= sozinho) já foi comprovada
+# INSUFICIENTE neste projeto (ver nota técnica de
+# carregar_dados_completos_da_nuvem acima, 2026-09-03) — a inicialização da
+# conexão com o Firebase (autenticação) roda ANTES da chamada em si e pode,
+# em teoria, travar por tempo indefinido sem que nenhum `timeout=` do lado
+# de dentro chegue a valer. Foi por isso que carregar_dados_completos_da_nuvem
+# (e as buscas da HG Brasil em core/market_data.py) passaram a rodar dentro
+# de uma thread com prazo TOTAL rígido — mas buscar_pendencias_pendentes,
+# marcar_pendencia, sincronizar_snapshot e salvar_dados_completos_na_nuvem
+# ainda não tinham recebido essa mesma proteção. Agora têm (ver
+# _rodar_com_prazo_total abaixo, extraído do mesmo padrão comprovado).
+TIMEOUT_TOTAL_OPERACAO_FIRESTORE_SEGUNDOS = 12
+
+
+def _rodar_com_prazo_total(funcao_sem_argumentos, valor_padrao: Any = None) -> Any:
+    """
+    Roda `funcao_sem_argumentos` (sem parâmetros — use uma lambda/closure
+    para passar argumentos) numa thread separada com um prazo TOTAL rígido
+    de TIMEOUT_TOTAL_OPERACAO_FIRESTORE_SEGUNDOS. Mesmo padrão, já testado
+    e comprovado, de carregar_dados_completos_da_nuvem (ver nota técnica
+    ali sobre por que é `threading.Thread` + `daemon=True` + `join(timeout=)`,
+    e NÃO `ThreadPoolExecutor` dentro de um `with` — o `with` espera a
+    thread travada terminar ao sair do bloco, cancelando o timeout na
+    prática).
+
+    Devolve `valor_padrao` se a função não terminar a tempo — a thread
+    trava "órfã" em segundo plano (daemon, nunca impede o app de seguir
+    nem de fechar depois).
+    """
+    resultado_container: dict[str, Any] = {}
+
+    def _trabalho() -> None:
+        resultado_container["valor"] = funcao_sem_argumentos()
+
+    thread = threading.Thread(target=_trabalho, daemon=True)
+    thread.start()
+    thread.join(timeout=TIMEOUT_TOTAL_OPERACAO_FIRESTORE_SEGUNDOS)
+    return resultado_container.get("valor", valor_padrao)
 
 
 def _migrar_chave_antiga_se_necessario() -> None:
@@ -243,16 +293,8 @@ def _garantir_firebase_inicializado() -> bool:
     return True
 
 
-def sincronizar_snapshot(snapshot: dict[str, Any]) -> bool:
-    """
-    Envia o retrato atual da carteira para o Firestore. Retorna True se
-    enviou com sucesso, False se a sincronização não está configurada ou
-    se algo deu errado (sem internet, chave inválida etc.).
-
-    Nunca lança uma exceção: sincronizar com o celular é um "extra" — uma
-    falha aqui não pode travar a atualização de cotações no PC, que é a
-    função principal do botão.
-    """
+def _sincronizar_snapshot_sem_prazo(snapshot: dict[str, Any]) -> bool:
+    """Faz o trabalho de verdade de sincronizar_snapshot() — separado para poder rodar dentro do prazo rígido de _rodar_com_prazo_total."""
     if not _garantir_firebase_inicializado():
         return False
     try:
@@ -260,6 +302,34 @@ def sincronizar_snapshot(snapshot: dict[str, Any]) -> bool:
 
         db = firestore.client()
         db.collection(COLECAO_FIRESTORE).document(DOCUMENTO_FIRESTORE).set(snapshot, timeout=TIMEOUT_FIRESTORE_SEGUNDOS)
+        return True
+    except Exception:
+        return False
+
+
+def sincronizar_snapshot(snapshot: dict[str, Any]) -> bool:
+    """
+    Envia o retrato atual da carteira para o Firestore. Retorna True se
+    enviou com sucesso, False se a sincronização não está configurada, se
+    algo deu errado (sem internet, chave inválida etc.), ou se demorou
+    demais (2026-09-04 — ver TIMEOUT_TOTAL_OPERACAO_FIRESTORE_SEGUNDOS).
+
+    Nunca trava nem lança uma exceção: sincronizar com o celular é um
+    "extra" — uma falha ou demora aqui não pode travar a atualização de
+    cotações no PC, que é a função principal do botão.
+    """
+    return bool(_rodar_com_prazo_total(lambda: _sincronizar_snapshot_sem_prazo(snapshot), valor_padrao=False))
+
+
+def _salvar_dados_completos_na_nuvem_sem_prazo(dados: dict[str, Any]) -> bool:
+    """Faz o trabalho de verdade de salvar_dados_completos_na_nuvem() — separado para poder rodar dentro do prazo rígido de _rodar_com_prazo_total."""
+    if not _garantir_firebase_inicializado():
+        return False
+    try:
+        from firebase_admin import firestore
+
+        db = firestore.client()
+        db.collection(COLECAO_FIRESTORE).document(DOCUMENTO_DADOS_COMPLETOS).set(dados, timeout=TIMEOUT_FIRESTORE_SEGUNDOS)
         return True
     except Exception:
         return False
@@ -274,21 +344,13 @@ def salvar_dados_completos_na_nuvem(dados: dict[str, Any]) -> bool:
     nuvem" best-effort.
 
     Retorna True se enviou com sucesso, False se a sincronização não está
-    configurada ou se algo deu errado (sem internet, chave inválida etc.).
-    Nunca lança exceção: a gravação LOCAL (a que realmente importa pro app
-    continuar funcionando) já aconteceu antes desta chamada — uma falha
-    aqui não pode derrubar nada.
+    configurada, se algo deu errado (sem internet, chave inválida etc.), ou
+    se demorou demais (2026-09-04 — ver TIMEOUT_TOTAL_OPERACAO_FIRESTORE_SEGUNDOS).
+    Nunca trava nem lança exceção: a gravação LOCAL (a que realmente
+    importa pro app continuar funcionando) já aconteceu antes desta
+    chamada — uma falha ou demora aqui não pode derrubar nada.
     """
-    if not _garantir_firebase_inicializado():
-        return False
-    try:
-        from firebase_admin import firestore
-
-        db = firestore.client()
-        db.collection(COLECAO_FIRESTORE).document(DOCUMENTO_DADOS_COMPLETOS).set(dados, timeout=TIMEOUT_FIRESTORE_SEGUNDOS)
-        return True
-    except Exception:
-        return False
+    return bool(_rodar_com_prazo_total(lambda: _salvar_dados_completos_na_nuvem_sem_prazo(dados), valor_padrao=False))
 
 
 def _carregar_dados_completos_da_nuvem_sem_prazo() -> dict[str, Any] | None:
@@ -347,17 +409,8 @@ def carregar_dados_completos_da_nuvem() -> dict[str, Any] | None:
     return resultado_container.get("valor")
 
 
-def buscar_pendencias_pendentes(colecao: str = COLECAO_PENDENCIAS) -> list[dict[str, Any]]:
-    """
-    Busca no Firestore os pedidos criados pelo celular numa coleção de
-    pendência (compra/venda, remoção ou cálculo de preço teto) que ainda
-    não foram aplicados (status == "pendente"). Cada item vem com um campo
-    extra "_id" (o id do documento no Firestore), usado depois para marcar
-    como aplicado/erro com marcar_pendencia().
-
-    Nunca lança exceção: sem internet ou sem sincronização configurada, só
-    retorna lista vazia — o app continua funcionando normalmente sem o celular.
-    """
+def _buscar_pendencias_pendentes_sem_prazo(colecao: str) -> list[dict[str, Any]]:
+    """Faz o trabalho de verdade de buscar_pendencias_pendentes() — separado para poder rodar dentro do prazo rígido de _rodar_com_prazo_total."""
     if not _garantir_firebase_inicializado():
         return []
     try:
@@ -375,15 +428,60 @@ def buscar_pendencias_pendentes(colecao: str = COLECAO_PENDENCIAS) -> list[dict[
         return []
 
 
-def marcar_pendencia(
-    doc_id: str, status: str, mensagem_erro: str | None = None,
-    colecao: str = COLECAO_PENDENCIAS, campos_extra: dict[str, Any] | None = None,
+def buscar_pendencias_pendentes(colecao: str = COLECAO_PENDENCIAS) -> list[dict[str, Any]]:
+    """
+    Busca no Firestore os pedidos criados pelo celular numa coleção de
+    pendência (compra/venda, remoção ou cálculo de preço teto) que ainda
+    não foram aplicados (status == "pendente"). Cada item vem com um campo
+    extra "_id" (o id do documento no Firestore), usado depois para marcar
+    como aplicado/erro com marcar_pendencia().
+
+    Nunca trava nem lança exceção: sem internet, sem sincronização
+    configurada, ou demorando demais (2026-09-04 — chamada dentro de
+    _rodar_com_prazo_total; ver comentário em
+    TIMEOUT_TOTAL_OPERACAO_FIRESTORE_SEGUNDOS sobre por que isso importa
+    especialmente aqui — "Atualizar Dados" chama esta função para 4
+    coleções diferentes, EM SEQUÊNCIA, logo no início), só retorna lista
+    vazia — o app continua funcionando normalmente sem o celular.
+    """
+    return _rodar_com_prazo_total(lambda: _buscar_pendencias_pendentes_sem_prazo(colecao), valor_padrao=[]) or []
+
+
+def buscar_pendencias_pendentes_varias_colecoes(colecoes: list[str]) -> dict[str, list[dict[str, Any]]]:
+    """
+    Mesmo princípio de core/market_data.py::buscar_historicos_precos_em_paralelo
+    e core/b3_publico.py::buscar_proventos_anunciados_varios (2026-09-04):
+    busca várias coleções de pendências do celular AO MESMO TEMPO em vez de
+    uma de cada vez — `atualizar_dados` (ui/acoes_comuns.py) precisa
+    consultar 4 coleções (compras, remoções, preço-teto, teses) logo no
+    início, e fazer isso em sequência (mesmo já com cada uma limitada a
+    TIMEOUT_TOTAL_OPERACAO_FIRESTORE_SEGUNDOS) ainda somava até 4x esse
+    prazo. Cada busca individual já é protegida por buscar_pendencias_pendentes
+    (prazo total + nunca lança exceção), então rodar em paralelo aqui é
+    seguro — nenhuma tem efeito colateral, é só leitura.
+
+    Devolve um dict {coleção: lista de pendências} com uma entrada para
+    CADA coleção pedida (lista vazia se não achou nada ou se demorou
+    demais) — quem chama nunca precisa checar se a chave existe.
+    """
+    resultado: dict[str, list[dict[str, Any]]] = {}
+    if not colecoes:
+        return resultado
+    with ThreadPoolExecutor(max_workers=len(colecoes)) as executor:
+        futuro_por_colecao = {executor.submit(buscar_pendencias_pendentes, colecao): colecao for colecao in colecoes}
+        for futuro in as_completed(futuro_por_colecao):
+            colecao = futuro_por_colecao[futuro]
+            try:
+                resultado[colecao] = futuro.result()
+            except Exception:
+                resultado[colecao] = []
+    return resultado
+
+
+def _marcar_pendencia_sem_prazo(
+    doc_id: str, status: str, mensagem_erro: str | None, colecao: str, campos_extra: dict[str, Any] | None
 ) -> None:
-    """Atualiza o status de um pedido do celular (aplicado/erro) depois de processá-lo,
-    opcionalmente gravando campos extra no mesmo documento (ex: o resultado calculado
-    da calculadora de preço teto, pra o celular exibir sem precisar de outra consulta).
-    Nunca lança exceção — se falhar, o pior caso é o celular continuar mostrando
-    "pendente" um pouco mais, sem travar o app do PC."""
+    """Faz o trabalho de verdade de marcar_pendencia() — separado para poder rodar dentro do prazo rígido de _rodar_com_prazo_total."""
     if not _garantir_firebase_inicializado():
         return
     try:
@@ -398,3 +496,18 @@ def marcar_pendencia(
         db.collection(colecao).document(doc_id).update(atualizacao, timeout=TIMEOUT_FIRESTORE_SEGUNDOS)
     except Exception:
         pass
+
+
+def marcar_pendencia(
+    doc_id: str, status: str, mensagem_erro: str | None = None,
+    colecao: str = COLECAO_PENDENCIAS, campos_extra: dict[str, Any] | None = None,
+) -> None:
+    """Atualiza o status de um pedido do celular (aplicado/erro) depois de processá-lo,
+    opcionalmente gravando campos extra no mesmo documento (ex: o resultado calculado
+    da calculadora de preço teto, pra o celular exibir sem precisar de outra consulta).
+    Nunca trava nem lança exceção — se falhar ou demorar demais (2026-09-04, ver
+    _rodar_com_prazo_total), o pior caso é o celular continuar mostrando
+    "pendente" um pouco mais, sem travar o app do PC."""
+    _rodar_com_prazo_total(
+        lambda: _marcar_pendencia_sem_prazo(doc_id, status, mensagem_erro, colecao, campos_extra), valor_padrao=None
+    )

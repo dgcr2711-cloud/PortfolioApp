@@ -23,7 +23,7 @@ from core.pendencias_celular import (
     aplicar_remocoes_do_celular,
     aplicar_teses_do_celular,
 )
-from ui.ativos import montar_lista_ativos, todos_os_tickers
+from ui.ativos import montar_lista_ativos
 
 
 def atualizar_dados(dados: dict, salvar) -> None:
@@ -34,10 +34,32 @@ def atualizar_dados(dados: dict, salvar) -> None:
     watchlist, salva um snapshot de patrimônio para o gráfico de Evolução,
     e persiste tudo em disco.
     """
-    aplicadas_do_celular, erros_do_celular = aplicar_pendencias_do_celular(dados, salvar)
-    removidas_do_celular, erros_remocao_celular = aplicar_remocoes_do_celular(dados, salvar)
-    calculadas_do_celular, erros_calculo_celular = aplicar_calculos_teto_do_celular(dados, salvar)
-    teses_do_celular, erros_tese_celular = aplicar_teses_do_celular(dados, salvar)
+    # 2026-09-04 — as 4 buscas abaixo (uma por tipo de pedido do celular)
+    # rodavam em sequência, cada uma podendo levar até
+    # cloud_sync.TIMEOUT_TOTAL_OPERACAO_FIRESTORE_SEGUNDOS: motivo real de
+    # "Atualizar Dados" travar por mais de 40s relatado por Diego, ANTES
+    # até de chegar na busca de cotações. Buscar as 4 de uma vez em
+    # paralelo (só a LEITURA — aplicar continua em sequência, porque cada
+    # aplicar_*_do_celular pode alterar `dados` e salvar em disco, o que
+    # não é seguro fazer em paralelo) corta isso de ~4x o prazo para ~1x.
+    pendencias_por_colecao = cloud_sync.buscar_pendencias_pendentes_varias_colecoes([
+        cloud_sync.COLECAO_PENDENCIAS,
+        cloud_sync.COLECAO_PENDENCIAS_REMOCOES,
+        cloud_sync.COLECAO_PENDENCIAS_PRECO_TETO,
+        cloud_sync.COLECAO_PENDENCIAS_TESE,
+    ])
+    aplicadas_do_celular, erros_do_celular = aplicar_pendencias_do_celular(
+        dados, salvar, pendencias_por_colecao.get(cloud_sync.COLECAO_PENDENCIAS)
+    )
+    removidas_do_celular, erros_remocao_celular = aplicar_remocoes_do_celular(
+        dados, salvar, pendencias_por_colecao.get(cloud_sync.COLECAO_PENDENCIAS_REMOCOES)
+    )
+    calculadas_do_celular, erros_calculo_celular = aplicar_calculos_teto_do_celular(
+        dados, salvar, pendencias_por_colecao.get(cloud_sync.COLECAO_PENDENCIAS_PRECO_TETO)
+    )
+    teses_do_celular, erros_tese_celular = aplicar_teses_do_celular(
+        dados, salvar, pendencias_por_colecao.get(cloud_sync.COLECAO_PENDENCIAS_TESE)
+    )
 
     posicoes = calc.consolidar_posicoes(dados["compras"], dados["eventos"])
     tickers_posicoes = {p["ticker"] for p in posicoes}
@@ -361,29 +383,10 @@ def exibir_status_cotacoes() -> None:
 
 
 def exibir_aviso_cotacoes_antigas(dados: dict) -> None:
-    """
-    Sinaliza quando a carteira ainda exibe cotações fora da janela esperada.
-
-    2026-09-04 (Diego reportou o aviso aparecendo sempre no site, mesmo
-    logo depois de clicar "Atualizar Dados"): a checagem olhava TODO
-    `dados["cotacoes"]`, inclusive tickers que ele já removeu da
-    carteira/watchlist (encontrado ao investigar: ALOS3 e ITSA4, com
-    "atualizadoEm" de 29/08 — batendo exatamente com o aviso do print).
-    Como "Atualizar Dados" só busca cotação de quem está ATIVO hoje
-    (`core.market_data.atualizar_cotacoes`, chamado só com posições +
-    watchlist), um ticker removido nunca mais recebe uma cotação nova — a
-    entrada órfã ficava disparando o aviso pra sempre, mesmo sem nenhum
-    problema real de atualização. Agora só considera tickers atualmente
-    ativos (mesmo critério de `ui.ativos.montar_lista_ativos`); as
-    cotações órfãs continuam salvas em disco (não são apagadas — não
-    fazem mal parado ali), só param de ser checadas aqui.
-    """
+    """Sinaliza quando a carteira ainda exibe cotações fora da janela esperada."""
     agora = datetime.now()
-    tickers_ativos = set(todos_os_tickers(dados))
     antigas: list[tuple[str, datetime]] = []
     for ticker, cotacao in dados.get("cotacoes", {}).items():
-        if ticker not in tickers_ativos:
-            continue
         valor = cotacao.get("atualizadoEm") if isinstance(cotacao, dict) else None
         if not valor:
             continue

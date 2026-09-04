@@ -47,14 +47,19 @@ def _validar_pendencia(pendencia: dict[str, Any]) -> str | None:
     return None
 
 
-def aplicar_pendencias_do_celular(dados: dict[str, Any], salvar) -> tuple[int, int]:
+def aplicar_pendencias_do_celular(dados: dict[str, Any], salvar, pendencias: list[dict[str, Any]] | None = None) -> tuple[int, int]:
     """
-    Busca pedidos pendentes do celular, valida e aplica os válidos em
-    dados["compras"] (salvando com `salvar`). Retorna (quantidade_aplicada,
-    quantidade_com_erro). Se a sincronização não estiver configurada ou não
-    houver pedidos, retorna (0, 0) sem fazer nada — seguro de chamar sempre.
+    Valida e aplica em dados["compras"] (salvando com `salvar`) os pedidos
+    pendentes do celular passados em `pendencias` — ou, se `pendencias` for
+    None (compatibilidade: nenhum ainda buscado), busca sozinha (2026-09-04:
+    normalmente já vem pré-buscada por
+    cloud_sync.buscar_pendencias_pendentes_varias_colecoes, chamada uma vez
+    só pra todas as 4 coleções em paralelo — ver ui/acoes_comuns.py). Retorna
+    (quantidade_aplicada, quantidade_com_erro). Sem pedidos, retorna (0, 0)
+    sem fazer nada — seguro de chamar sempre.
     """
-    pendencias = cloud_sync.buscar_pendencias_pendentes()
+    if pendencias is None:
+        pendencias = cloud_sync.buscar_pendencias_pendentes()
     if not pendencias:
         return (0, 0)
 
@@ -89,14 +94,16 @@ def aplicar_pendencias_do_celular(dados: dict[str, Any], salvar) -> tuple[int, i
     return (aplicadas, com_erro)
 
 
-def aplicar_remocoes_do_celular(dados: dict[str, Any], salvar) -> tuple[int, int]:
+def aplicar_remocoes_do_celular(dados: dict[str, Any], salvar, pendencias: list[dict[str, Any]] | None = None) -> tuple[int, int]:
     """
     Aplica pedidos de remoção de transação criados pela aba Histórico do
     celular (mobile-app/src/screens/HistoricoScreen.tsx) — equivalente a
     clicar em "🗑️ Remover uma transação" na aba Compras & Vendas do PC.
-    Retorna (quantidade_removida, quantidade_com_erro).
+    `pendencias` já pré-buscada (ver aplicar_pendencias_do_celular) ou None
+    pra buscar sozinha. Retorna (quantidade_removida, quantidade_com_erro).
     """
-    pendencias = cloud_sync.buscar_pendencias_pendentes(cloud_sync.COLECAO_PENDENCIAS_REMOCOES)
+    if pendencias is None:
+        pendencias = cloud_sync.buscar_pendencias_pendentes(cloud_sync.COLECAO_PENDENCIAS_REMOCOES)
     if not pendencias:
         return (0, 0)
 
@@ -150,18 +157,20 @@ def _validar_pendencia_preco_teto(pendencia: dict[str, Any]) -> str | None:
     return None
 
 
-def aplicar_calculos_teto_do_celular(dados: dict[str, Any], salvar) -> tuple[int, int]:
+def aplicar_calculos_teto_do_celular(dados: dict[str, Any], salvar, pendencias: list[dict[str, Any]] | None = None) -> tuple[int, int]:
     """
     Aplica pedidos de cálculo de Preço Teto (FCD) criados pela aba Preço
     Teto do celular (mobile-app/src/screens/PrecoTetoScreen.tsx) — usa a
     MESMA função calc.calcular_fcd() da calculadora do PC (ui/preco_teto.py),
     então o resultado é sempre idêntico ao que sairia se você tivesse
-    preenchido o formulário aqui. O resultado é salvo em
-    dados["precosTeto"][ticker] (aparece na aba Carteira) e também
+    preenchido o formulário aqui. `pendencias` já pré-buscada (ver
+    aplicar_pendencias_do_celular) ou None pra buscar sozinha. O resultado é
+    salvo em dados["precosTeto"][ticker] (aparece na aba Carteira) e também
     devolvido no próprio pedido, para o celular exibir na hora.
     Retorna (quantidade_calculada, quantidade_com_erro).
     """
-    pendencias = cloud_sync.buscar_pendencias_pendentes(cloud_sync.COLECAO_PENDENCIAS_PRECO_TETO)
+    if pendencias is None:
+        pendencias = cloud_sync.buscar_pendencias_pendentes(cloud_sync.COLECAO_PENDENCIAS_PRECO_TETO)
     if not pendencias:
         return (0, 0)
 
@@ -226,15 +235,17 @@ def _validar_pendencia_tese(pendencia: dict[str, Any]) -> str | None:
     return None
 
 
-def aplicar_teses_do_celular(dados: dict[str, Any], salvar) -> tuple[int, int]:
+def aplicar_teses_do_celular(dados: dict[str, Any], salvar, pendencias: list[dict[str, Any]] | None = None) -> tuple[int, int]:
     """
     Aplica pedidos de nova entrada no Diário de Tese criados pelo celular
     (mobile-app/src/screens/TeseScreen.tsx) — usa a MESMA função
     core.teses.adicionar_entrada() da aba do PC, então uma entrada escrita
     no celular vira uma linha idêntica no diário, com a mesma validação.
-    Retorna (quantidade_aplicada, quantidade_com_erro).
+    `pendencias` já pré-buscada (ver aplicar_pendencias_do_celular) ou None
+    pra buscar sozinha. Retorna (quantidade_aplicada, quantidade_com_erro).
     """
-    pendencias = cloud_sync.buscar_pendencias_pendentes(cloud_sync.COLECAO_PENDENCIAS_TESE)
+    if pendencias is None:
+        pendencias = cloud_sync.buscar_pendencias_pendentes(cloud_sync.COLECAO_PENDENCIAS_TESE)
     if not pendencias:
         return (0, 0)
 
