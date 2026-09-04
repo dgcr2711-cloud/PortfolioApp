@@ -19,12 +19,33 @@ on:
     - cron: "0 12,16,20 * * 0,6"
   workflow_dispatch: {}  # permite rodar manualmente em Actions -> Atualizar dados e verificar alertas em segundo plano -> Run workflow
 
+# 2026-09-05 — SEM isto, uma execução que fica presa na fila do GitHub (em
+# dias de bastante uso, ou com várias execuções manuais seguidas — foi
+# exatamente o que aconteceu hoje) roda o commit que existia no MOMENTO EM
+# QUE ELA FOI AGENDADA, não o mais recente — mesmo que, na hora em que ela
+# finalmente executa de verdade, o código já tenha mudado várias vezes. Foi
+# assim que uma correção testada e confirmada no GitHub pareceu "não fazer
+# efeito nenhuma" por quase uma hora: a execução que aparecia na tela era
+# sempre uma antiga, atrasada na fila, nunca a mais nova. `cancel-in-progress`
+# faz uma execução nova CANCELAR qualquer uma anterior deste mesmo workflow
+# que ainda esteja na fila ou rodando — garante que só a versão mais recente
+# do código chega a rodar de verdade.
+concurrency:
+  group: atualizar-dados
+  cancel-in-progress: true
+
 jobs:
   atualizar-dados:
     runs-on: ubuntu-latest
     steps:
       - name: Baixar o código do repositório
         uses: actions/checkout@v4
+
+      # 2026-09-05 — imprime, sem precisar baixar log nenhum, exatamente
+      # qual commit e de quando está rodando nesta execução — a forma mais
+      # rápida de perceber se uma execução pegou uma versão atrasada.
+      - name: Confirmar qual commit está rodando
+        run: git log -1 --format="Rodando o commit %H%n%s%nfeito em %ci"
 
       - name: Configurar Python
         uses: actions/setup-python@v5
