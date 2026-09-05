@@ -79,6 +79,34 @@ COLECAO_PENDENCIAS_TESE = "pendencias_teses"
 _app_inicializado = False
 _migracao_ja_tentada = False
 
+
+def _descrever_erro_com_causa(erro: Exception) -> str:
+    """
+    2026-09-05 — descoberto lendo um log real do GitHub Actions com
+    timestamp por linha: um `RetryError('Timeout of 60.0s exceeded')` NÃO
+    é o erro de verdade — é só a biblioteca do Google desistindo depois de
+    tentar de novo por conta própria por até 60s. O motivo de CADA
+    tentativa individual ter falhado (o de verdade útil pra diagnosticar:
+    DNS, rede bloqueada, credencial recusada pelo servidor etc.) fica
+    guardado em `erro.cause` (ou em `erro.__cause__`, dependendo de como a
+    biblioteca lançou), nunca aparecendo em `repr(erro)` sozinho — por isso
+    os prints de diagnóstico deste arquivo até agora mostravam sempre a
+    mesma mensagem genérica de timeout, nunca a causa raiz de verdade.
+    Esta função junta o erro com toda a cadeia de causas conhecida (limite
+    de 5 níveis, só por segurança contra um loop) numa linha só de log.
+    """
+    partes = [repr(erro)]
+    atual: BaseException | None = erro
+    vistos: set[int] = {id(erro)}
+    for _ in range(5):
+        proxima = getattr(atual, "cause", None) or getattr(atual, "__cause__", None)
+        if proxima is None or id(proxima) in vistos:
+            break
+        partes.append(f"causa: {proxima!r}")
+        vistos.add(id(proxima))
+        atual = proxima
+    return " | ".join(partes)
+
 # Prazo máximo (segundos) para qualquer chamada de rede ao Firestore
 # (2026-09-03 — antes disso não existia limite nenhum aqui). Sem isso, uma
 # instabilidade de rede ou de autenticação (ex: logo depois de trocar a
@@ -320,7 +348,7 @@ def _sincronizar_snapshot_sem_prazo(snapshot: dict[str, Any]) -> bool:
         # falha (sem parar nada, sem mudar o retorno False) porque essa
         # falha estava totalmente muda no log do GitHub Actions — impossível
         # saber se era permissão, dado inválido ou timeout sem isso.
-        print(f"[cloud_sync] Falha ao sincronizar snapshot com o Firestore: {erro!r}")
+        print(f"[cloud_sync] Falha ao sincronizar snapshot com o Firestore: {_descrever_erro_com_causa(erro)}")
         return False
 
 
@@ -350,7 +378,7 @@ def _salvar_dados_completos_na_nuvem_sem_prazo(dados: dict[str, Any]) -> bool:
         return True
     except Exception as erro:
         # 2026-09-04 — mesmo diagnóstico temporário de _sincronizar_snapshot_sem_prazo acima.
-        print(f"[cloud_sync] Falha ao salvar dados completos no Firestore: {erro!r}")
+        print(f"[cloud_sync] Falha ao salvar dados completos no Firestore: {_descrever_erro_com_causa(erro)}")
         return False
 
 
@@ -391,7 +419,7 @@ def _carregar_dados_completos_da_nuvem_sem_prazo() -> dict[str, Any] | None:
         # uma falha aqui (ex: o mesmo timeout de rede visto na escrita) é
         # invisível — o app só parece estar usando a carteira vazia padrão,
         # sem nenhuma pista de que a nuvem foi consultada e falhou.
-        print(f"[cloud_sync] Falha ao carregar dados completos do Firestore: {erro!r}")
+        print(f"[cloud_sync] Falha ao carregar dados completos do Firestore: {_descrever_erro_com_causa(erro)}")
         return None
 
 
@@ -459,7 +487,13 @@ def _buscar_pendencias_pendentes_sem_prazo(colecao: str) -> list[dict[str, Any]]
             item["_id"] = documento.id
             pendencias.append(item)
         return pendencias
-    except Exception:
+    except Exception as erro:
+        # 2026-09-05 — mesmo diagnóstico temporário das outras funções deste
+        # arquivo: esta busca ficava muda em qualquer falha, e ela é
+        # chamada logo no INÍCIO de main() (para 4 coleções), então também
+        # pode estar consumindo boa parte do tempo de uma execução travada
+        # sem deixar nenhuma pista no log.
+        print(f"[cloud_sync] Falha ao buscar pendências em '{colecao}' no Firestore: {_descrever_erro_com_causa(erro)}")
         return []
 
 
